@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sqlite3
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -491,6 +492,193 @@ def estatisticas_triagem() -> dict[str, Any]:
         "por_destino": por_destino,
         "por_categoria": por_categoria,
         "taxa_rebaixamento_para_n1": round(rebaixados / triados * 100, 1) if triados else 0.0,
+    }
+
+
+# --------------------------------------------------------------------------- #
+# Telemetria, injeção ao vivo e pacote de engenharia
+# --------------------------------------------------------------------------- #
+
+def logs_globais(limite: int = 50) -> dict[str, Any]:
+    """Últimos logs HTTP de todos os clientes, com empresa e plano (somente leitura)."""
+    limite = max(1, min(int(limite), 200))
+    with _connect() as conn:
+        logs = _rows(
+            conn.execute(
+                """
+                SELECT l.id, l.timestamp, l.metodo, l.endpoint, l.status_code,
+                       l.latencia_ms, l.request_id, l.mensagem_erro, l.stack_trace,
+                       c.empresa, c.plano
+                  FROM logs_http l
+                  JOIN clientes c ON c.id = l.cliente_id
+                 ORDER BY l.timestamp DESC
+                 LIMIT ?
+                """,
+                (limite,),
+            ).fetchall()
+        )
+    return {"ok": True, "total": len(logs), "logs": logs}
+
+
+def injetar_chamado() -> dict[str, Any]:
+    """Cria um ticket inédito (TK-1009, TK-1010...) com 3 logs HTTP 429.
+
+    Usado ao vivo na apresentação para simular um cliente abrindo um chamado crítico.
+    O protocolo é sempre o próximo disponível, para repetir a demo quantas vezes quiser.
+    """
+    agora = _now().replace(microsecond=0)
+    with _connect(readonly=False) as conn:
+        numeros = []
+        for (protocolo,) in conn.execute("SELECT protocolo FROM tickets").fetchall():
+            encontrado = re.match(r"TK-(\d+)$", protocolo or "")
+            if encontrado:
+                numeros.append(int(encontrado.group(1)))
+        proximo = max(numeros, default=1000) + 1
+        novo_protocolo = f"TK-{proximo:04d}"
+
+        conn.execute(
+            """
+            INSERT INTO tickets
+                (protocolo, cliente_id, titulo, descricao, canal, urgencia_reportada,
+                 status, atribuido_para, criado_em, atualizado_em)
+            VALUES (?, 3, ?, ?, 'chat', 'critica', 'aberto', 'N1', ?, ?)
+            """,
+            (
+                novo_protocolo,
+                "Bloqueio total na integração de vendas",
+                (
+                    "Nossa integração de pedidos parou de sincronizar. Todas as chamadas "
+                    "retornam 429 e as vendas do dia estão travadas. Precisamos de ajuda urgente!"
+                ),
+                agora.isoformat(),
+                agora.isoformat(),
+            ),
+        )
+        ticket_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+
+        mensagem = "rate_limit_exceeded: plano=free limite=60 req/min"
+        for indice in range(3):
+            momento = (agora - timedelta(minutes=2 - indice)).isoformat()
+            conn.execute(
+                """
+                INSERT INTO logs_http
+                    (cliente_id, timestamp, metodo, endpoint, status_code,
+                     latencia_ms, request_id, mensagem_erro)
+                VALUES (3, ?, 'POST', '/v1/pedidos/sincronizar', 429, ?, ?, ?)
+                """,
+                (momento, 980 + indice * 140, f"req_live_{proximo}_{indice + 1:02d}", mensagem),
+            )
+        conn.commit()
+
+    return {
+        "ok": True,
+        "ticket_id": ticket_id,
+        "protocolo": novo_protocolo,
+        "logs_inseridos": 3,
+        "cliente": "Startup Cloud",
+        "mensagem": f"Chamado {novo_protocolo} injetado ao vivo com 3 logs HTTP 429.",
+    }
+
+
+def gerar_pacote_engenharia(ticket_id: int) -> dict[str, Any]:
+    """Monta um card técnico (Jira/Linear) para bugs reais com HTTP 5xx."""
+    with _connect() as conn:
+        ticket = _row(
+            conn.execute(
+                """
+                SELECT t.id, t.cliente_id, t.protocolo, t.titulo, t.descricao,
+                       t.urgencia_reportada, t.diagnostico, t.criado_em,
+                       c.nome AS cliente, c.empresa, c.plano
+                  FROM tickets t JOIN clientes c ON c.id = t.cliente_id
+                 WHERE t.id = ?
+                """,
+                (int(ticket_id),),
+            ).fetchone()
+        )
+        if not ticket:
+            return _erro(f"ticket {ticket_id} não encontrado")
+
+        logs = _rows(
+            conn.execute(
+                """
+                SELECT metodo, endpoint, status_code, latencia_ms, request_id,
+                       mensagem_erro, stack_trace
+                  FROM logs_http
+                 WHERE cliente_id = ? AND status_code >= 500 AND timestamp BETWEEN ? AND ?
+                 ORDER BY timestamp DESC
+                 LIMIT 200
+                """,
+                (ticket["cliente_id"], *(_janela_do_ticket(ticket["criado_em"]))),
+            ).fetchall()
+        )
+
+    if not logs:
+        return _erro(
+            f"não há HTTP 5xx na janela do ticket {ticket['protocolo']}: "
+            "este não é um bug real para N2."
+        )
+
+    por_endpoint: dict[str, int] = {}
+    request_ids: list[str] = []
+    stack_trace = ""
+    for log in logs:
+        chave = f"{log['metodo']} {log['endpoint']}"
+        por_endpoint[chave] = por_endpoint.get(chave, 0) + 1
+        if log["request_id"] not in request_ids:
+            request_ids.append(log["request_id"])
+        if not stack_trace and log["stack_trace"]:
+            stack_trace = log["stack_trace"]
+
+    endpoint_afetado = max(por_endpoint, key=por_endpoint.get)
+    latencias = [l["latencia_ms"] for l in logs]
+
+    linhas = [linha.strip() for linha in stack_trace.splitlines() if linha.strip()] if stack_trace else []
+    excecao = next(
+        (linha for linha in linhas if re.match(r"^[A-Za-z_][A-Za-z0-9_]*Error:", linha)),
+        logs[0]["mensagem_erro"] or "Falha HTTP 500",
+    )
+    # O "File" relevante é o último antes da exceção (o ponto onde ela foi lançada),
+    # não o primeiro do traceback (que é só o entrypoint da API).
+    indice_excecao = linhas.index(excecao) if excecao in linhas else len(linhas)
+    local = next((linha for linha in reversed(linhas[:indice_excecao]) if linha.startswith("File ")), "")
+    origem = re.search(r'File "([^"]+)", line (\d+)', local)
+    resumo = f"{excecao} em {origem.group(1)}:{origem.group(2)}" if origem else excecao
+
+    chave_perdida = re.search(r"KeyError:\s*'([^']+)'", excecao)
+    criterio = (
+        f"Tratar ausência da chave '{chave_perdida.group(1)}' no payload e validar retorno HTTP 200."
+        if chave_perdida
+        else f"Tratar {excecao} em {endpoint_afetado} e validar retorno HTTP 200 com payload válido."
+    )
+
+    urgencia = ticket["urgencia_reportada"]
+    plano = ticket["plano"]
+    severidade = (
+        f"P1 - Crítica (Cliente {plano.capitalize()})"
+        if urgencia in ("critica", "alta")
+        else "P2 - Alta"
+    )
+
+    return {
+        "ok": True,
+        "ticket_id": ticket["id"],
+        "card_engenharia": {
+            "titulo_issue": (
+                f"[BUG N2] {ticket['protocolo']} — Falha 500 em "
+                f"{endpoint_afetado.split(' ', 1)[-1]} ({ticket['empresa']})"
+            ),
+            "severidade": severidade,
+            "endpoint_afetado": endpoint_afetado,
+            "request_ids_correlacionados": request_ids,
+            "resumo_tecnico": resumo,
+            "stack_trace": stack_trace,
+            "criterio_aceite": criterio,
+            "logs_5xx": len(logs),
+            "latencia_maxima_ms": max(latencias) if latencias else None,
+            "empresa": ticket["empresa"],
+            "plano": plano,
+            "diagnostico": ticket["diagnostico"],
+        },
     }
 
 

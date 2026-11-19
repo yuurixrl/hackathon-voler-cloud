@@ -13,7 +13,10 @@ Endpoints principais:
     POST /api/tickets/{id}/triagem  -> grava a triagem (direto, legado)
     POST /api/agente/analisar       -> analise gerada pelo MCP em processo separado
     POST /api/agente/triagem        -> triagem gravada pelo MCP em processo separado
+    POST /api/agente/pacote         -> card de engenharia gerado pela tool MCP
     GET  /api/agente/status         -> tools expostas pelo servidor MCP
+    GET  /api/logs                  -> telemetria HTTP global (somente leitura)
+    POST /api/injetar-chamado       -> cria ticket inédito + 3 logs ao vivo
     GET  /api/estatisticas          -> placar
     GET  /api/playbook              -> regras + categorias válidas
     POST /api/reset                 -> recria o banco de demonstração
@@ -273,6 +276,14 @@ async def agente_analisar(dados: AgenteAnaliseIn) -> JSONResponse:
     return _json(await _chamar_mcp("analisar_causa_raiz", {"ticket_id": dados.ticket_id}))
 
 
+@app.post("/api/agente/pacote")
+async def agente_pacote(dados: AgenteAnaliseIn) -> JSONResponse:
+    """O card da engenharia também nasce dentro de uma tool do MCP separado."""
+    return _json(
+        await _chamar_mcp("gerar_pacote_engenharia", {"ticket_id": dados.ticket_id})
+    )
+
+
 @app.post("/api/agente/triagem")
 async def agente_triar(dados: AgenteTriagemIn) -> JSONResponse:
     """A triagem e gravada pela tool MCP; a API apenas repassa e avisa via SSE."""
@@ -297,6 +308,28 @@ async def agente_triar(dados: AgenteTriagemIn) -> JSONResponse:
                 "protocolo": resultado.get("protocolo"),
                 "status": resultado.get("status"),
                 "tempo_ms": resultado.get("tempo_ms"),
+            }
+        )
+    return _json(resultado)
+
+
+@app.get("/api/logs")
+def logs_globais(limite: int = 50) -> JSONResponse:
+    """Telemetria HTTP de todos os clientes, lida em modo=ro."""
+    return _json(triagem.logs_globais(limite))
+
+
+@app.post("/api/injetar-chamado")
+async def injetar_chamado() -> JSONResponse:
+    """Simula um chamado crítico chegando ao vivo durante a apresentação."""
+    resultado = await asyncio.to_thread(triagem.injetar_chamado)
+    if resultado.get("ok"):
+        bus.publish(
+            {
+                "tipo": "novo_chamado",
+                "ticket_id": resultado.get("ticket_id"),
+                "protocolo": resultado.get("protocolo"),
+                "cliente": resultado.get("cliente"),
             }
         )
     return _json(resultado)

@@ -45,11 +45,11 @@ Porta/host da API via `OPS_DETECTIVE_PORT` (padrão `8000`) e `OPS_DETECTIVE_HOS
 | Arquivo | Conteúdo |
 |---|---|
 | `setup_db.py` | schema + massa de dados (clientes, tickets, logs) |
-| `triagem.py` | domínio: conexão SQLite, consultas, análise de causa raiz, triagem, stats, playbook, health e reset |
-| `server.py` | adaptador MCP: 7 tools + 1 resource (`playbook://triagem`) |
+| `triagem.py` | domínio: conexão SQLite, consultas, análise, triagem, telemetria global, injeção, pacote de engenharia, stats, playbook, health e reset |
+| `server.py` | adaptador MCP: 8 tools + 1 resource (`playbook://triagem`) |
 | `api.py` | adaptador HTTP: rotas `/api/*`, ponte MCP via stdio, SSE, arquivos estáticos |
 | `painel_ao_vivo.py` | lançador do painel de apresentação na porta 8080 (reusa `api.app`) |
-| `index.html` | front-end (KPIs, abas, drawer, evidências, formulário, SSE + polling 1s) |
+| `index.html` | front-end (KPIs, 5 abas, auditoria, injeção, drawer com pacote N2, SSE + polling 1s) |
 | `app.css` | entrada Tailwind v4 (`@import`, `@source`, tokens do design system) |
 | `static/app.css` | CSS compilado, servido ao navegador — **versionado** |
 | `package.json` | scripts `build:css` / `watch:css` (Tailwind v4) |
@@ -59,8 +59,8 @@ Porta/host da API via `OPS_DETECTIVE_PORT` (padrão `8000`) e `OPS_DETECTIVE_HOS
 
 - **Código e mensagens em português**; nomes de funções/tabelas em `snake_case`.
 - **SQL sempre parametrizado** (`?`) — nada de f-string com entrada do usuário.
-- Consultas abrem o banco em **modo read-only** (`mode=ro`); só `triar_ticket` e
-  `reset_demo` escrevem.
+- Consultas abrem o banco em **modo read-only** (`mode=ro`), incluindo `logs_globais` e
+  `gerar_pacote_engenharia`; só `triar_ticket`, `injetar_chamado` e `reset_demo` escrevem.
 - `triagem.py` devolve `{"ok": true, ...}` ou `{"ok": false, "erro": "..."}` — nunca
   levanta exceção para erro de entrada, para o agente conseguir se corrigir.
 - `api.py` usa `_json()` para traduzir isso: `ok: true` → 200; erro com "não encontrado"
@@ -69,16 +69,26 @@ Porta/host da API via `OPS_DETECTIVE_PORT` (padrão `8000`) e `OPS_DETECTIVE_HOS
 - Filtros/abas do front usam `status` (`aberto`, `em_triagem`, `devolvido_n1`,
   `escalado_n2`, `resolvido`), **não** `atribuido_para` (os tickets semeados já vêm com
   `atribuido_para='N1'` mesmo estando abertos).
-- SSE publica `{"tipo": "triagem", ...}` e `{"tipo": "reset"}` no barramento em memória;
-  o front recarrega fila/estatísticas ao receber. Eventos de clientes lentos são
-  descartados (`QueueFull`) para não travar a API.
+- SSE publica `{"tipo": "triagem", ...}`, `{"tipo": "novo_chamado", ...}` e
+  `{"tipo": "reset"}` no barramento em memória; o front recarrega fila/estatísticas ao
+  receber. Eventos de clientes lentos são descartados (`QueueFull`) para não travar a API.
 - A análise e a triagem do drawer passam pela **ponte MCP**: `api.py` inicia
   `server.py` em outro processo via `stdio_client`, chama `analisar_causa_raiz` /
   `triar_ticket` e devolve o JSON com `ferramenta`, `origem` e `tempo_ms`. O front
   mostra o estado “Agente MCP analisando…”, o selo MCP âmbar e a trilha de tool calls.
   A resposta sugerida (`resposta_cliente_sugerida`) é composta dentro da tool, no
-  `triagem.py`, não no JavaScript. Rotas legadas `/api/tickets/{id}/analise` e
-  `/triagem` continuam funcionando, mas o front não as usa mais.
+  `triagem.py`, não no JavaScript. O card de engenharia segue o mesmo caminho:
+  `POST /api/agente/pacote` → tool `gerar_pacote_engenharia`. Rotas legadas
+  `/api/tickets/{id}/analise` e `/triagem` continuam funcionando, mas o front não as usa mais.
+- A V2 adicionou 3 frentes no front: **aba `logs`** (`/api/logs?limite=50`, tabela com
+  status colorido e `<details>` de stack trace), **auditoria** derivada de
+  `state.tickets.filter(t => t.triado_em)` ordenado por `triado_em` (inclui escritas do
+  MCP no chat) e **botão de injeção** (`POST /api/injetar-chamado` → `TK-1009` ou próximo,
+  Startup Cloud/`cliente_id=3`, urgência `crítica`, 3 logs 429). O protocolo é calculado
+  pelo `MAX` dos `TK-\d+` existentes; o `id` do ticket é o `last_insert_rowid()`.
+- `gerar_pacote_engenharia` exige HTTP `5xx` na janela `_janela_do_ticket()`; para 4xx
+  devolve `_erro(...)` (a API traduz para 400). O `resumo_tecnico` pega a última linha
+  `File "…", line N` **antes** da exceção — não o entrypoint da API.
 - O front também faz **polling de 1s** em `/api/tickets`, `/api/estatisticas` e
   `/api/health` como rede de segurança. Ele compara uma assinatura
   (`id:status:triado_em:categoria:diagnostico`) e, quando detecta uma escrita vinda do
@@ -98,7 +108,9 @@ Porta/host da API via `OPS_DETECTIVE_PORT` (padrão `8000`) e `OPS_DETECTIVE_HOS
 | TK-1007 | Fintech X | só `202` (nada falhou) | N1 |
 | TK-1008 | Boutique Estilo | `403` conta inadimplente | N1 |
 
-Se mudar a massa de dados, atualize esta tabela e o roteiro no `README.md`.
+Além destes, o botão de injeção cria o **TK-1009+** (Startup Cloud, 3× 429 em
+`POST /v1/pedidos/sincronizar`) durante a apresentação. Se mudar a massa de dados,
+atualize esta tabela e o roteiro no `README.md`.
 
 ## Rotas da API
 
@@ -106,6 +118,7 @@ Se mudar a massa de dados, atualize esta tabela e o roteiro no `README.md`.
 `GET /api/tickets/{id}/analise` · `GET /api/tickets/{id}/logs` ·
 `POST /api/tickets/{id}/triagem` · `GET /api/agente/status` ·
 `POST /api/agente/analisar` · `POST /api/agente/triagem` ·
+`POST /api/agente/pacote` · `GET /api/logs` · `POST /api/injetar-chamado` ·
 `GET /api/estatisticas` · `GET /api/playbook` ·
 `POST /api/reset` · `GET /api/events`.
 
@@ -151,7 +164,9 @@ Invoke-RestMethod http://127.0.0.1:8000/api/tickets/5/analise
 - O navegador carrega `static/app.css`, não `app.css`: após alterar HTML/CSS, rode
   `npm run build:css`, senão as mudanças não aparecem.
 - `npm install` só é necessário para gerar o CSS; a API em si roda só com o `requirements.txt`.
-- `POST /api/reset` e qualquer teste de `POST /triagem` alteram o banco; rode
-  `setup_db.py` ao final para devolver a demo aos 8 tickets abertos.
+- `POST /api/reset`, `POST /api/injetar-chamado` e qualquer teste de `POST /triagem`
+  alteram o banco; rode `setup_db.py` ao final para devolver a demo aos 8 tickets abertos.
+- O Claude Desktop precisa ser reiniciado para carregar a 8ª tool (`gerar_pacote_engenharia`);
+  a ponte MCP da API não sofre com isso porque sobe um `server.py` novo por chamada.
 - Config real do Claude Desktop Store fica em
   `%LOCALAPPDATA%\Claude-Data\<perfil>\claude_desktop_config.json`, não em `%APPDATA%\Claude`.

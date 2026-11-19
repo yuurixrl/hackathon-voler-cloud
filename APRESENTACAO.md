@@ -1,21 +1,22 @@
-# Ops Detective — Roteiro de Apresentação Ao Vivo (Split-Screen)
+# Ops Detective — Roteiro de Apresentação Ao Vivo (15 minutos)
 
-Guia de palco para provar, em 3 minutos, que o **MCP está conectando o modelo a uma
-infraestrutura real** — e não é só um chat que responde texto.
+Guia de palco para provar que o **MCP está conectando o modelo a uma infraestrutura
+real** — com telemetria, auditoria, injeção de incidente e entrega pronta para a engenharia.
 
 ## A ideia
 
 | Metade da tela | O que roda | O que a banca vê |
 |---|---|---|
-| **Esquerda — Sistema da empresa** | `painel_ao_vivo.py` → `http://127.0.0.1:8080` | Fila real lida do `suporte.db`, com destaque verde/vermelho no instante da escrita |
-| **Direita — O Agente** | Claude Desktop com as 7 tools do `server.py` (MCP/stdio) | O modelo investigando logs e chamando `analisar_causa_raiz` / `triar_ticket` |
+| **Esquerda — Sistema da empresa** | `painel_ao_vivo.py` → `http://127.0.0.1:8080` | Fila real do `suporte.db`, aba de logs HTTP, auditoria e cards que piscam no instante da escrita |
+| **Direita — O Agente** | Claude Desktop com as 8 tools do `server.py` (MCP/stdio) | O modelo investigando logs, chamando `analisar_causa_raiz`, `triar_ticket` e `gerar_pacote_engenharia` |
 
 ```text
  Claude / Codex (chat) -- tools MCP --> server.py (stdio) -- UPDATE --> suporte.db
-                                             ▲
- painel (8080) -- POST /api/agente/* --> api.py --+ (inicia server.py em outro processo)
-        │
-        └── SSE + polling 1s <--- suporte.db ---> card pisca e KPIs mudam
+                                             ▲       ▲
+ painel (8080) -- POST /api/agente/* --> api.py --+       | leitura mode=ro
+        │                                                  |
+        ├── /api/logs -------------------------------------+
+        └── SSE + polling 1s <--- suporte.db ---> card pisca, KPIs mudam, auditoria cresce
 ```
 
 O painel **não** é um chat: ele lê o mesmo banco que o MCP escreve. E, para provar que
@@ -23,13 +24,14 @@ a resposta não está decorada no HTML, o próprio painel também passa pelo MCP
 um chamado, ele mostra **“Agente MCP analisando…”**, dispara a tool
 `analisar_causa_raiz` em `server.py` (processo separado, ~2 s de subida) e só depois
 exibe o diagnóstico, a hipótese e a resposta sugerida — com a **trilha das tool calls**
-e a latência de cada uma. O selo **`MCP · 7 tools prontas`** fica verde no topo quando
+e a latência de cada uma. O selo **`MCP · 8 tools prontas`** fica verde no topo quando
 o servidor responde; fica âmbar enquanto uma tool está em execução.
 
 Quando o agente triar um chamado, o card pisca (**verde** = devolvido ao N1,
 **vermelho** = escalado ao N2), ganha o selo **`ATUALIZADO AGORA`**, mostra o diagnóstico
 gravado e libera o botão de copiar resposta. O outro badge exibe
-**`SQLite Conectado (Ao Vivo) · N aguardando triagem`**.
+**`SQLite Conectado (Ao Vivo) · N aguardando triagem`**. Toda triagem — venha do chat ou
+do painel — aparece também no painel **Atividade Recente do Agente MCP**.
 
 > O SSE entrega a mudança na hora; o polling de 1 segundo é a rede de segurança caso a
 > conexão SSE caia. Os dois caminhos terminam na mesma função `triagem.py`.
@@ -49,62 +51,106 @@ gravado e libera o botão de copiar resposta. O outro badge exibe
 ```
 
 Abra `http://127.0.0.1:8080` na **esquerda** e deixe o Claude Desktop na **direita**.
-Confira o selo verde no topo e os 8 chamados aguardando triagem.
+Se o Claude ainda mostrar 7 tools, reinicie-o (sair pelo ícone da bandeja) para carregar
+a 8ª, `gerar_pacote_engenharia`. No navegador, use Ctrl+F5 se o CSS estiver em cache.
+Confira os dois selos verdes no topo e os 8 chamados aguardando triagem.
 
-## Roteiro coreografado (3 minutos)
+## Roteiro coreografado (15 minutos)
 
-### Ato 1 — O cenário de caos (30 s)
+### 00:00 – 03:00 — A dor do suporte N1 → N2
 
 Aponte para a esquerda:
 
 > "Aqui está a fila real do suporte: 8 chamados abertos, vários críticos, todos
-> aguardando investigação. No fluxo tradicional, o N1 não enxerga os logs da API e
-> joga tudo para os desenvolvedores."
+> aguardando investigação. O N1 não enxerga os logs da API e, para não assumir risco,
+> joga tudo para os desenvolvedores. Cada falso alarme custa uma troca de contexto de
+> ~35 minutos para a engenharia."
 
-### Ato 2 — Barrando um falso alarme ao vivo (1 min)
+Mostre os KPIs: **Travando Engenharia (N2)**, **Falsos Alarmes Barrados (N1)** e
+**Economia Estimada de Dev**.
 
-Digite no chat da direita:
+### 03:00 – 05:00 — Arquitetura MCP (por que é seguro)
+
+Explique o desenho no quadro, junto ao diagrama acima:
+
+- `triagem.py` é a única camada de domínio — regras e SQLite em um só lugar.
+- `server.py` é o adaptador MCP (stdio); `api.py` é o adaptador HTTP; o painel 8080
+  reaproveita a mesma `api.app`.
+- **Leitura sempre em `mode=ro`.** Escrita só em três pontos controlados:
+  `triar_ticket`, `injetar_chamado` e `reset_demo`.
+- A ponte MCP do painel sobe `server.py` em **outro processo** via `stdio_client` —
+  o mesmo protocolo do Claude Desktop. por isso o spinner dura ~2 s: é a prova visual
+  de que a resposta está sendo gerada sob demanda, não servida de um arquivo estático.
+
+### 05:00 – 11:00 — Demo ao vivo
+
+**1) Falso alarme (≈2 min).** Digite no chat da direita:
 
 > "Analise a causa raiz do ticket TK-1001 da Loja Verão e registre a triagem no banco de dados."
 
-O que a banca vê:
+- O agente encontra 6 erros `HTTP 401` (API key expirada há 2 dias).
+- Abra o TK-1001 no painel: selo MCP âmbar, `analisar_causa_raiz(ticket_id=1)`,
+  diagnóstico aparecendo depois da latência medida.
+- O card **pisca em verde**, vira **DEVOLVIDO N1**, libera **Copiar Resposta N1**.
+- Role até **Atividade Recente do Agente MCP**: `[Hora] TK-1001 → Devolvido N1
+  (credencial_expirada)` já está lá.
 
-- o agente consulta os logs e encontra 6 erros `HTTP 401` (API key expirada há 2 dias);
-- ao abrir o chamado no painel, o selo MCP fica âmbar e aparece
-  `analisar_causa_raiz(ticket_id=1)` com a animação de análise;
-- à esquerda, o card **TK-1001 pisca em verde**, muda para **DEVOLVIDO N1 (FALSO ALARME)**,
-  mostra o diagnóstico vindo do SQLite e libera **Copiar Resposta N1**.
+**2) Logs HTTP ao vivo (≈1 min).** Clique na 5ª aba **Logs HTTP (Telemetria)**.
 
-### Ato 3 — Isolando um bug real com stack trace (1 min)
+- Mostre os 38 eventos reais do banco: empresa, `POST /v1/relatorios/atendimentos`,
+  badges verdes/âmbar/vermelhos, latência e `request_id`.
+- Abra um `<details>` de stack trace e conecte com o que o agente acabou de dizer.
 
-Digite no chat da direita:
+**3) Bug real + pacote de engenharia (≈2 min).** Digite no chat:
 
-> "Agora investigue o TK-1005 da HealthData e faça a triagem."
+> "Agora investigue o TK-1005 da HealthData, faça a triagem e gere o pacote para engenharia."
 
-O que a banca vê:
+- O agente detecta `HTTP 500` com `KeyError: 'segmento'` em `report_service.py:142`.
+- O card **fica vermelho** como **ESCALADO N2** e a auditoria ganha a linha N2.
+- No drawer do TK-1005, clique em **Gerar pacote engenharia**: o botão mostra
+  `gerar_pacote_engenharia(ticket_id=5)` e aparece o card estilo Jira/Linear com
+  severidade `P1 - Crítica (Cliente Enterprise)`, endpoint, 4 request IDs,
+  `KeyError: 'segmento' em /app/services/report_service.py:142`, stack trace completo e
+  critério de aceite. Clique em **Copiar card para o Jira**.
 
-- o agente detecta `HTTP 500` com `KeyError: 'segmento'` em `report_service.py`;
-- à esquerda, o card **TK-1005 fica vermelho** como **ESCALADO N2 (BUG REAL)** —
-  vai para engenharia só o que exige código, já com arquivo e linha do erro.
+**4) Injeção de chamado ao vivo (≈1 min).** Clique em **⚡ Injetar Chamado Ao Vivo**.
 
-### Ato 4 — Limpando a fila e placar final (30 s)
+- Toast: **"Novo chamado TK-1009 recebido!"**
+- O `TK-1009` da Startup Cloud (plano free, urgência **CRÍTICA**) entra na fila com
+  3 logs `429 rate_limit_exceeded: plano=free limite=60 req/min` em
+  `POST /v1/pedidos/sincronizar`.
+- Abra o chamado no painel e deixe o agente analisar na hora: o destino sugerido é
+  **N1** — é um limite de plano, não um bug. Trie pelo chat ou pelo formulário e mostre
+  a nova linha aparecendo na auditoria. Repita o botão se quiser ver o `TK-1010`.
 
-Digite no chat da direita:
+### 11:00 – 15:00 — Impacto de negócio e perguntas
+
+Se ainda houver tickets abertos, digite:
 
 > "Faça a triagem de todos os tickets restantes da fila e me mostre as estatísticas finais."
 
 Fechamento: os cards se organizam sozinhos — **6 devolvidos ao N1 e apenas 2 bugs
 reais para o N2** — e o KPI **Economia Estimada de Dev** chega a **3h 30m**
-(6 × 35 min), atualizado sem recarregar a página.
+(6 × 35 min), atualizado sem recarregar a página. Reforce:
+
+- falso alarme barrado antes de consumir engenharia;
+- bug real chega ao dev com evidência e card pronto, sem ida e volta;
+- injeção ao vivo prova que o sistema reage a incidente novo, não só a massa de teste;
+- auditoria responde "quem decidiu o quê e quando" — inclusive para ações do agente.
 
 ## Dicas de palco
 
 - Se o modelo não usar as ferramentas, cite os nomes: `analisar_causa_raiz`,
-  `buscar_logs_http`, `triar_ticket` e `estatisticas_triagem`.
+  `buscar_logs_http`, `triar_ticket`, `gerar_pacote_engenharia` e
+  `estatisticas_triagem`.
 - O destino correto é determinado pela regra em `triagem.py`: `4xx → N1`,
   `5xx + stack trace → N2`, sem erro → N1. O agente pode discordar, e o sistema
   avisa quando isso acontece — isso também é bom material de defesa.
+- `gerar_pacote_engenharia` recusa tickets N1 com `{"ok": false, ...}`: se alguém
+  perguntar, responda que não faz sentido abrir issue de engenharia para erro de cliente.
 - Ao final, clique em **Resetar Fila (Demo)** no painel (ou rode `setup_db.py`) para
-  repetir a apresentação do zero.
-- Se o badge ficar vermelho, o banco não foi encontrado: rode `setup_db.py`. Se ficar
-  âmbar, o SSE caiu; o polling de 1 s continua funcionando e o `EventSource` reconecta.
+  repetir a apresentação do zero. O reset também apaga os tickets injetados.
+- Se o badge SQLite ficar vermelho, rode `setup_db.py`. Se ficar âmbar, o SSE caiu;
+  o polling de 1 s continua funcionando e o `EventSource` reconecta.
+- Se o badge MCP ficar vermelho, o `server.py` não subiu: use sempre o Python do
+  `.venv` (o global não tem o pacote `mcp`).

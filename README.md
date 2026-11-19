@@ -31,7 +31,7 @@ ops-detective/
 ├── requirements.txt
 ├── claude_desktop_config.example.json
 ├── CONTEXTO_HACKATHON.md          # especificação do projeto
-├── APRESENTACAO.md                # roteiro de palco split-screen (3 minutos)
+├── APRESENTACAO.md                # roteiro de palco (15 minutos, V2)
 ├── AGENTS.md                      # guia para agentes/devs que mexem no repo
 └── .venv/                         # ambiente virtual (não versionado)
 ```
@@ -72,7 +72,7 @@ A tela traz KPIs (bloqueios N2, falsos alarmes N1 e economia estimada), quatro v
 da fila, um painel lateral com evidências (status codes, endpoints, mensagens, stack
 traces e logs) e o formulário para registrar a triagem. Dois selos no topo mostram o
 estado de cada sistema: **`SQLite Conectado (Ao Vivo) · N aguardando triagem`** para o
-banco (SSE + polling de 1s) e **`MCP · 7 tools prontas`** para o agente.
+banco (SSE + polling de 1s) e **`MCP · 8 tools prontas`** para o agente.
 
 **As respostas não vêm prontas no HTML.** Ao abrir um chamado, o front chama
 `POST /api/agente/analisar`, que inicia `server.py` em **outro processo** via stdio e
@@ -81,6 +81,29 @@ a tool chamada, a latência medida e uma **trilha do agente** com as chamadas re
 A sugestão de resposta ao cliente também nasce dentro dessa tool. O formulário é
 enviado por `POST /api/agente/triagem`, que executa `triar_ticket` no mesmo servidor
 MCP separado — a API HTTP apenas repassa o resultado e publica o evento SSE.
+
+### O que a V2 acrescentou
+
+- **Aba `Logs HTTP (Telemetria)`** (5ª aba, também na pílula flutuante): os últimos 50
+  eventos reais do `suporte.db`, ordenados por horário, com empresa/plano, método +
+  endpoint, badge de status HTTP (2xx verde, 4xx âmbar, 5xx vermelho), latência,
+  `request_id` e `<details>` com o stack trace quando existe. Leitura em `mode=ro`.
+- **Trilha de Auditoria** — painel colapsável **“Atividade Recente do Agente MCP”**:
+  todos os tickets com `triado_em`, do mais recente para o mais antigo, no formato
+  `[Hora] TK-XXXX → Devolvido N1 (credencial_expirada)`. Como a origem é o banco,
+  triagens feitas no chat do Claude aparecem junto com as do painel.
+- **Botão `⚡ Injetar Chamado Ao Vivo`**: cria o `TK-1009` (ou o próximo protocolo livre)
+  para a Startup Cloud (plano free), urgência `crítica`, título *“Bloqueio total na
+  integração de vendas”* e 3 logs `POST /v1/pedidos/sincronizar` com `429
+  rate_limit_exceeded: plano=free limite=60 req/min`. O toast anuncia o chamado, o SSE
+  publica `novo_chamado` e a fila atualiza na hora. Pode ser repetido: o protocolo
+  incrementa (`TK-1009`, `TK-1010`, ...).
+- **Tool `gerar_pacote_engenharia`** (8ª tool do MCP): para bugs reais (5xx), gera um
+  card estilo Jira/Linear com `titulo_issue`, `severidade`, `endpoint_afetado`,
+  `request_ids_correlacionados`, `resumo_tecnico`, `stack_trace` e `criterio_aceite`.
+  No drawer de um ticket N2, o botão **“Gerar pacote engenharia”** dispara essa tool
+  pela ponte MCP (`POST /api/agente/pacote`) e mostra o card com a latência medida.
+  Para falsos alarmes (4xx) a tool responde `{"ok": false, ...}` — não há o que escalar.
 
 ### Endpoints da API
 
@@ -96,10 +119,13 @@ MCP separado — a API HTTP apenas repassa o resultado e publica o evento SSE.
 | `GET` | `/api/agente/status` | tools expostas pelo `server.py` via stdio |
 | `POST` | `/api/agente/analisar` | análise gerada pela tool MCP `analisar_causa_raiz` |
 | `POST` | `/api/agente/triagem` | triagem gravada pela tool MCP `triar_ticket` |
+| `POST` | `/api/agente/pacote` | card de engenharia gerado pela tool MCP `gerar_pacote_engenharia` |
+| `GET` | `/api/logs` | telemetria HTTP global (`limite`, padrão 50) |
+| `POST` | `/api/injetar-chamado` | cria ticket inédito + 3 logs 429 ao vivo |
 | `GET` | `/api/estatisticas` | placar por status/destino/categoria |
 | `GET` | `/api/playbook` | regras e categorias válidas |
 | `POST` | `/api/reset` | recria o banco de demonstração |
-| `GET` | `/api/events` | SSE (`triagem`, `reset`, `conectado`) |
+| `GET` | `/api/events` | SSE (`triagem`, `novo_chamado`, `reset`, `conectado`) |
 
 Erros de entrada devolvem `{"ok": false, "erro": "..."}` com HTTP 400; recurso
 inexistente retorna 404.
@@ -122,7 +148,11 @@ as mudanças por SSE e, como rede de segurança, consulta o banco a cada 1 segun
 Quando o Claude triar um ticket pelo MCP, o card pisca verde (N1) ou vermelho (N2)
 com o selo **`ATUALIZADO AGORA`**, sem recarregar a página.
 
-O roteiro completo (4 atos, 3 minutos) está em [`APRESENTACAO.md`](APRESENTACAO.md).
+Use a aba **Logs HTTP (Telemetria)** para mostrar o rastro técnico, o painel **Atividade
+Recente do Agente MCP** para a auditoria, **Injetar Chamado Ao Vivo** para simular um
+incidente chegando e **Gerar pacote engenharia** no drawer de um ticket N2 para entregar
+o card à engenharia. O roteiro completo (15 minutos) está em
+[`APRESENTACAO.md`](APRESENTACAO.md).
 
 ## Conectar ao Claude Desktop
 
@@ -145,7 +175,7 @@ O servidor MCP continua disponível e aponta para a mesma camada `triagem.py`.
 ```
 
 3. Reinicie o Claude Desktop (sair pelo ícone da bandeja, não só fechar a janela).
-4. No chat, clique no ícone de ferramentas e confirme que `ops-detective` aparece com 7 tools.
+4. No chat, clique no ícone de ferramentas e confirme que `ops-detective` aparece com 8 tools.
 
 > O modelo do arquivo está em [`claude_desktop_config.example.json`](claude_desktop_config.example.json).
 
@@ -159,6 +189,7 @@ O servidor MCP continua disponível e aponta para a mesma camada `triagem.py`.
 | `buscar_logs_http` | Rastro técnico por cliente, endpoint, status code e janela de tempo |
 | `analisar_causa_raiz` | Pacote de evidências + hipótese + destino sugerido (N1/N2) |
 | `triar_ticket` | Registra diagnóstico, ação e resposta ao cliente; muda o status |
+| `gerar_pacote_engenharia` | Card técnico (Jira/Linear) para bugs 5xx: severidade, endpoints, request_ids, resumo, stack trace e aceite |
 | `estatisticas_triagem` | Placar por status, destino e categoria + taxa de rebaixamento |
 
 Recurso: `playbook://triagem` — regras de decisão do time de suporte.
@@ -178,8 +209,15 @@ Prompt para abrir a demo:
 > Para os que voltam, já escreva a resposta ao cliente."
 
 Na web: clique em **Analisar Próximo** para abrir o primeiro ticket pendente, confira as
-evidências no drawer e registre a triagem. **Resetar Fila (Demo)** devolve tudo ao estado
-inicial.
+evidências no drawer e registre a triagem. Para a V2, complete com:
+1. abrir a aba **Logs HTTP (Telemetria)** e mostrar os 38 eventos reais;
+2. triar o `TK-1001` (falso alarme) e conferir a linha nova na **Atividade Recente do
+   Agente MCP**;
+3. abrir o `TK-1005`, clicar em **Gerar pacote engenharia** e copiar o card;
+4. clicar em **⚡ Injetar Chamado Ao Vivo**, ver o `TK-1009` (429 da Startup Cloud)
+   aparecer e triá-lo na hora.
+
+**Resetar Fila (Demo)** devolve tudo aos 8 tickets abertos.
 
 ## Testes rápidos
 
@@ -208,11 +246,14 @@ JSON-RPC. Para um teste programático, veja o exemplo de client em
   regras entre o Claude e a interface.
 - **`mcp<2` fixado no `requirements.txt`:** o SDK 2.x renomeou `FastMCP` para `MCPServer`
   e quebrou imports; o projeto usa a API FastMCP clássica.
-- **Banco somente leitura nas consultas:** as leituras abrem o SQLite com `mode=ro`;
-  apenas `triar_ticket` e o reset escrevem.
+- **Banco somente leitura nas consultas:** as leituras (incluindo `/api/logs` e
+  `gerar_pacote_engenharia`) abrem o SQLite com `mode=ro`; apenas `triar_ticket`,
+  `injetar_chamado` e o reset escrevem.
 - **Janela de análise:** `analisar_causa_raiz` olha de 6h antes até 1h depois da abertura
   do ticket, evitando que logs de outros incidentes do mesmo cliente contaminem o diagnóstico.
-- **SSE em vez de polling:** o servidor mantém filas por navegador e publica `triagem` e
-  `reset`; reconexão automática via `EventSource` (`retry: 3000`).
+- **SSE com rede de segurança:** o servidor mantém filas por navegador e publica
+  `triagem`, `novo_chamado` e `reset`; reconexão automática via `EventSource`
+  (`retry: 3000`). O front também faz polling de 1s para capturar escritas vindas do
+  MCP no SQLite.
 - **Tailwind v4 compilado:** `app.css` é a entrada com os tokens do design system; o
   resultado vai para `static/app.css` e é versionado (não é preciso Node para rodar a API).

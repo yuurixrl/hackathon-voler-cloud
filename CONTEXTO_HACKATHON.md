@@ -154,16 +154,20 @@ misturar incidentes diferentes do mesmo cliente.
 ## 7. Critérios de aceite
 
 - [x] `setup_db.py` recria o banco do zero e imprime as contagens.
-- [x] `server.py` sobe por stdio e expõe 7 tools + 1 resource.
+- [x] `server.py` sobe por stdio e expõe 8 tools + 1 resource.
 - [x] Para TK-1001/1002/1003/1004/1007/1008, `analisar_causa_raiz` sugere **N1**.
 - [x] Para TK-1005/1006, sugere **N2** e inclui stack trace.
 - [x] `triar_ticket` valida entrada, grava diagnóstico/resposta e não permite triagem dupla.
 - [x] Claude Desktop lista o servidor e executa as tools.
 - [x] O agente devolve ao N1 com resposta pronta ao cliente nos falsos alarmes.
+- [x] V2: `/api/logs` expõe a telemetria global; o front tem a aba de Logs HTTP e o feed
+  de auditoria derivado de `triado_em`.
+- [x] V2: `POST /api/injetar-chamado` cria o TK-1009+ com 3 logs `429` e publica SSE.
+- [x] V2: `gerar_pacote_engenharia` devolve o card Jira/Linear para 5xx e recusa 4xx.
 
 ---
 
-## 8. Roteiro de apresentação (4 minutos)
+## 8. Roteiro de apresentação (15 minutos — versão V2)
 
 1. **Problema (40s):** mostrar `listar_tickets` com 8 chamados "críticos" e a fila do N2.
 2. **Investigação (90s):** pedir análise do TK-1001 ("sistema fora do ar") → logs `401` +
@@ -171,3 +175,6 @@ misturar incidentes diferentes do mesmo cliente.
 3. **Contraste (60s):** pedir análise do TK-1005 → `500` + stack trace → escalar ao N2.
 4. **Placar (40s):** `estatisticas_triagem` exibindo a taxa de rebaixamento para N1.
 5. **Fechamento (30s):** "o N2 só recebe o que é bug de verdade, já com evidência".
+
+O roteiro coreografado de 15 minutos (com aba de logs, auditoria, pacote de engenharia
+e injeção ao vivo) está em [`APRESENTACAO.md`](APRESENTACAO.md).

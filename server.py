@@ -10,6 +10,7 @@ Ferramentas:
     buscar_logs_http     - rastro técnico por cliente/endpoint/status
     analisar_causa_raiz  - pacote de evidências + hipótese (4xx x 5xx)
     triar_ticket         - devolve ao N1 ou escala ao N2 (grava a triagem)
+    gerar_pacote_engenharia - card técnico Jira/Linear para bugs reais (N2)
     estatisticas_triagem - placar dos atendimentos
 
 Recurso:
@@ -36,6 +37,9 @@ sem evidência técnica. Regras:
 - HTTP 5xx (500, 502, 503...) com stack trace = bug real -> escale ao N2 anexando o stack trace.
 - Nenhum erro nos logs = problema do lado do cliente ou dúvida de uso -> N1.
 Use `analisar_causa_raiz` antes de decidir e `triar_ticket` para registrar a conclusão.
+Quando a conclusão for N2, chame também `gerar_pacote_engenharia(ticket_id)` para entregar
+ao time de desenvolvimento um card com título, severidade, endpoint, request_ids,
+resumo técnico, stack trace e critério de aceite — e anexe esse card ao escalonamento.
 """
 
 mcp = FastMCP("ops-detective", instructions=INSTRUCTIONS)
@@ -157,6 +161,19 @@ def triar_ticket(
         acao_recomendada=acao_recomendada,
         resposta_cliente=resposta_cliente,
     )
+
+
+@mcp.tool()
+def gerar_pacote_engenharia(ticket_id: int) -> dict[str, Any]:
+    """Gera um card técnico estruturado (estilo Jira/Linear) com evidências e stack trace para bugs reais (N2).
+
+    Só funciona quando há HTTP 5xx na janela do chamado. Para falsos alarmes (4xx)
+    a tool devolve `{"ok": false, "erro": ...}` — não há o que enviar à engenharia.
+
+    Args:
+        ticket_id: id numérico do ticket (ex: 5 para TK-1005, 6 para TK-1006)
+    """
+    return triagem.gerar_pacote_engenharia(ticket_id)
 
 
 @mcp.tool()
