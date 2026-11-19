@@ -4,12 +4,12 @@
 
 Aplicação local de triagem N1 → N2 com **duas interfaces sobre a mesma camada de domínio**:
 
-- `server.py` — servidor MCP (FastMCP + stdio) usado pelo Claude Desktop;
+- `server.py` — servidor MCP (FastMCP + stdio) usado pelo Gemini e por clientes MCP como o Claude Desktop;
 - `api.py` — API HTTP (FastAPI) que serve a interface web com SSE.
 
 Sobre a ponte MCP roda `agente.py`, o agente de IA do chat: interpreta a mensagem e
-decide quais tools chamar (roteador determinístico offline por padrão, Claude via
-`ANTHROPIC_API_KEY` quando configurada). Ambas consomem `triagem.py`, que concentra
+decide quais tools chamar (roteador determinístico offline sem chave, Gemini via
+`GEMINI_API_KEY` quando configurada). Ambas consomem `triagem.py`, que concentra
 SQLite e regras de classificação. O
 `painel_ao_vivo.py` é apenas o lançador da porta 8080 para a apresentação split-screen. Ver
 [`CONTEXTO_HACKATHON.md`](CONTEXTO_HACKATHON.md) para a especificação,
@@ -51,7 +51,9 @@ Porta/host da API via `OPS_DETECTIVE_PORT` (padrão `8000`) e `OPS_DETECTIVE_HOS
 | `triagem.py` | domínio: conexão SQLite, consultas, análise, triagem, telemetria global, injeção, pacote de engenharia, stats, playbook, health e reset |
 | `server.py` | adaptador MCP: 8 tools + 1 resource (`playbook://triagem`) |
 | `api.py` | adaptador HTTP: rotas `/api/*`, ponte MCP via stdio, SSE, arquivos estáticos |
-| `agente.py` | agente de IA: roteador demo offline, tool-use Anthropic, eventos `agente_*` |
+| `agente.py` | agente web: roteador demo offline, tool-use Gemini, eventos `agente_*` |
+| `gemini_cliente.py` | cliente Gemini compartilhado, chave do `.env` e modelo padrão |
+| `chat_gemini.py` | chatbot de terminal: Gemini com tool-use sobre o MCP |
 | `painel_ao_vivo.py` | lançador do painel de apresentação na porta 8080 (reusa `api.app`) |
 | `index.html` | front-end (KPIs, 5 abas, chat flutuante do agente, auditoria, injeção, drawer com pacote N2, SSE + polling 1s) |
 | `app.css` | entrada Tailwind v4 (`@import`, `@source`, tokens do design system) |
@@ -100,10 +102,13 @@ Porta/host da API via `OPS_DETECTIVE_PORT` (padrão `8000`) e `OPS_DETECTIVE_HOS
   (com nome/args/latência), `agente_erro` e `agente_resposta`; quando a tool `triar_ticket`
   grava, o próprio agente publica `triagem` com o mesmo `id` do turno. O front usa esse `id`
   para não duplicar a resposta entre SSE e a resposta HTTP.
-- `agente.modo()` devolve `anthropic` se `ANTHROPIC_API_KEY` estiver definida; senão `demo`.
-  O import de `anthropic` é **tardio** — o modo demo funciona sem o pacote instalado e sem
-  rede. Ferramentas são descobertas via `list_tools()` e convertidas para `input_schema`;
-  não duplique assinaturas de tools no agente. Teto: 6 iterações / 1024 tokens / 90 s.
+- `agente.modo()` devolve `gemini` se `GEMINI_API_KEY` estiver definida; senão `demo`.
+  `OPS_AGENTE_MODO=demo|gemini` força o modo (útil para testar o fallback com chave no `.env`).
+  O import de `google.genai` é **tardio** — o modo demo funciona sem o pacote instalado e
+  sem rede. Ferramentas são descobertas via `list_tools()` e convertidas para
+  `FunctionDeclaration` no `gemini_cliente`/`agente.py`; não duplique assinaturas de tools.
+  Teto: 6 iterações / 1024 tokens / 90 s. Modelo padrão `gemini-3.5-flash-lite`,
+  com retry e fallback para `gemini-3.7-flash` / `gemini-3.6-flash`.
 - `gerar_pacote_engenharia` exige HTTP `5xx` na janela `_janela_do_ticket()`; para 4xx
   devolve `_erro(...)` (a API traduz para 400). O `resumo_tecnico` pega a última linha
   `File "…", line N` **antes** da exceção — não o entrypoint da API.
@@ -175,6 +180,8 @@ Invoke-RestMethod http://127.0.0.1:8000/api/tickets/5/analise
 
 - O SDK `mcp` **2.x** removeu `mcp.server.fastmcp` (virou `MCPServer`). O
   `requirements.txt` fixa `mcp>=1.9,<2` de propósito.
+- `.env` guarda `GEMINI_API_KEY` e está no `.gitignore`; `.env.example` é o modelo versionado.
+- Chaves `AQ.` usam o endpoint AI Studio por padrão; `GEMINI_USAR_VERTEX=1` força Vertex AI.
 - Ao apontar o Claude Desktop para o servidor, use o Python **do `.venv`**;
   o Python global não tem o pacote `mcp` instalado.
 - `suporte.db` não é versionado: rode `setup_db.py` depois de clonar.

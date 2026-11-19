@@ -2,11 +2,12 @@
 
 Duas formas de operar, escolhidas por variável de ambiente:
 
-- **modo demo (padrão, offline)**: sem chave de API, um roteador determinístico interpreta
-  a intenção da mensagem e chama as mesmas tools do `server.py`. Mantém a apresentação
-  funcional sem internet e sem custo.
-- **modo Anthropic**: com `ANTHROPIC_API_KEY` definida, um Claude recebe as 8 tools do
-  MCP (descobertas em runtime via `list_tools`) e decide sozinho quais chamar.
+- **modo Gemini (principal)**: com `GEMINI_API_KEY` definida no `.env`, o Gemini recebe
+  as 8 tools do MCP (descobertas em runtime via `list_tools`) e decide sozinho quais
+  chamar. Modelo padrão: `gemini-3.5-flash-lite` (com fallback entre modelos).
+- **modo demo (offline)**: sem chave (ou com `OPS_AGENTE_MODO=demo`), um roteador
+  determinístico interpreta a intenção
+  da mensagem e chama as mesmas tools. Mantém a apresentação funcional sem internet.
 
 Em ambos os casos o agente **nunca escreve direto no SQLite**: toda ação passa pelo
 servidor MCP em processo separado. Os eventos `agente_*` publicados no barramento SSE
@@ -17,17 +18,18 @@ from __future__ import annotations
 
 import asyncio
 import json
-import os
 import re
 import time
 import unicodedata
 from typing import Any, Callable
 
+import gemini_cliente
 import triagem
+
+gemini_cliente.carregar_env()
 
 Evento = Callable[[dict[str, Any]], None]
 
-MODELO_PADRAO = "claude-3-5-sonnet-latest"
 MAX_ITERACOES = 6
 MAX_TOKENS = 1024
 LIMITE_MENSAGEM = 2000
@@ -42,12 +44,16 @@ AJUDA = (
 
 
 def modo() -> str:
-    """Devolve `anthropic` quando há chave configurada; senão `demo`."""
-    return "anthropic" if os.environ.get("ANTHROPIC_API_KEY", "").strip() else "demo"
+    """Devolve `gemini` quando há chave configurada; senão `demo`.
+
+    `OPS_AGENTE_MODO=demo` força o roteador offline para testes e apresentação
+    sem rede, mesmo com `GEMINI_API_KEY` no `.env`.
+    """
+    return gemini_cliente.modo_agente()
 
 
 def modelo() -> str:
-    return os.environ.get("OPS_AGENTE_MODELO", MODELO_PADRAO)
+    return gemini_cliente.modelo()
 
 
 def _normalizar(texto: str) -> str:
@@ -324,112 +330,153 @@ async def _modo_demo(
     return _finalizar(AJUDA, usadas, publicar, turno)
 
 
-def _ferramentas_anthropic(ferramentas_mcp: list[Any]) -> list[dict[str, Any]]:
-    """Converte `list_tools()` do MCP para o formato de tools da API Anthropic."""
+def _ferramentas_gemini(ferramentas_mcp: list[Any]) -> list[Any]:
+    """Converte `list_tools()` do MCP para function declarations do Gemini."""
+    from google.genai import types
+
     return [
-        {
-            "name": ferramenta.name,
-            "description": ferramenta.description or ferramenta.name,
-            "input_schema": ferramenta.inputSchema,
-        }
+        types.Tool(
+            function_declarations=[
+                types.FunctionDeclaration(
+                    name=ferramenta.name,
+                    description=ferramenta.description or ferramenta.name,
+                    parameters_json_schema=ferramenta.inputSchema,
+                )
+            ]
+        )
         for ferramenta in ferramentas_mcp
     ]
 
 
-async def _modo_anthropic(
+def _detalhe_erro(exc: Exception) -> str:
+    """Erros da API Gemini podem vir com mensagem vazia; mostra algo útil."""
+    texto = str(exc).strip()
+    if not texto:
+        texto = (
+            getattr(exc, "message", "")
+            or getattr(exc, "status_code", "")
+            or type(exc).__name__
+        )
+    return str(texto)[:400]
+
+
+async def _gerar_com_gemini(cliente: Any, contents: list[Any], config: Any) -> Any:
+    """Tenta o modelo configurado e alterna em caso de 503/404 transitório."""
+    modelos = gemini_cliente.modelos_candidatos()
+    erros: list[str] = []
+    for tentativa in range(3):
+        nome = modelos[tentativa % len(modelos)]
+        try:
+            return await asyncio.wait_for(
+                cliente.aio.models.generate_content(
+                    model=nome, contents=contents, config=config
+                ),
+                timeout=30,
+            )
+        except Exception as exc:  # noqa: BLE001 - quota/rede/etc.
+            erros.append(nome + ": " + _detalhe_erro(exc))
+            if tentativa < 2:
+                await asyncio.sleep(0.5 * (tentativa + 1))
+    raise RuntimeError(" | ".join(erros))
+
+
+async def _modo_gemini(
     mensagem: str,
     session: Any,
     publicar: Evento,
     turno: str,
 ) -> dict[str, Any]:
-    """Loop real de tool-use: o Claude escolhe quais tools chamar e quando parar."""
+    """Loop real de tool-use: o Gemini escolhe quais tools chamar e quando parar."""
     try:
-        from anthropic import AsyncAnthropic  # import tardio: modo demo não exige o pacote
-    except ImportError:
-        return _finalizar(
-            "O modo Anthropic precisa do pacote `anthropic` (`pip install -r requirements.txt`).",
-            [], publicar, turno, modo="anthropic",
-        )
+        from google.genai import types
 
-    client = AsyncAnthropic()
+        cliente = gemini_cliente.criar_cliente()
+    except Exception as exc:  # noqa: BLE001 - erro vira dado para o front
+        return {
+            "ok": False,
+            "erro": f"Não foi possível iniciar o Gemini: {exc}",
+            "id": turno,
+            "modo": "gemini",
+        }
+
     ferramentas_mcp = (await session.list_tools()).tools
-    ferramentas = _ferramentas_anthropic(ferramentas_mcp)
-    system = (
-        server_instructions()
-        + "\n\nRegras do domínio (playbook):\n"
-        + triagem.playbook_json()
-        + "\n\nResponda sempre em português e curto. Use as tools para toda afirmação sobre tickets."
-    )
-    mensagens: list[dict[str, Any]] = [{"role": "user", "content": mensagem}]
+    try:
+        ferramentas = _ferramentas_gemini(ferramentas_mcp)
+        config = types.GenerateContentConfig(
+            system_instruction=(
+                server_instructions()
+                + "\n\nRegras do domínio (playbook):\n"
+                + triagem.playbook_json()
+                + "\n\nResponda sempre em português e curto. "
+                "Use as tools para toda afirmação sobre tickets."
+            ),
+            temperature=0.2,
+            max_output_tokens=MAX_TOKENS,
+            tools=ferramentas,
+            automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"ok": False, "erro": f"Falha ao preparar tools: {exc}", "id": turno, "modo": "gemini"}
+
+    # Gemini mantém o histórico em `contents`; tool calls voltam como papel `user`.
+    contents: list[Any] = [
+        types.Content(role="user", parts=[types.Part(text=mensagem)])
+    ]
     usadas: list[str] = []
     texto_final = ""
 
     for _ in range(MAX_ITERACOES):
-        resposta = await asyncio.wait_for(
-            client.messages.create(
-                model=modelo(),
-                max_tokens=MAX_TOKENS,
-                system=system,
-                tools=ferramentas,
-                messages=mensagens,
-            ),
-            timeout=60,
-        )
-        mensagens.append({"role": "assistant", "content": resposta.content})
-        blocos_tool: list[dict[str, Any]] = []
+        try:
+            resposta = await _gerar_com_gemini(cliente, contents, config)
+        except Exception as exc:  # noqa: BLE001 - quota/rede/etc.
+            return {
+                "ok": False,
+                "erro": f"Gemini: {_detalhe_erro(exc)}",
+                "id": turno,
+                "modo": "gemini",
+            }
 
-        for bloco in resposta.content:
-            if getattr(bloco, "type", None) == "text" and bloco.text.strip():
-                texto_final += ("\n" if texto_final else "") + bloco.text.strip()
-                publicar({"tipo": "agente_texto", "id": turno, "texto": bloco.text})
-            elif getattr(bloco, "type", None) == "tool_use":
-                argumentos = bloco.input if isinstance(bloco.input, dict) else {}
-                # `_tool` publica o evento com nome, argumentos e latência real.
-                usadas.append(bloco.name)
-                resultado = await _tool(session, bloco.name, argumentos, publicar, turno)
-                blocos_tool.append(
+        if not resposta.candidates or not resposta.candidates[0].content:
+            break
+        parte = resposta.candidates[0].content
+
+        for pedaco in parte.parts or []:
+            if pedaco.text and pedaco.text.strip():
+                texto_final += ("\n" if texto_final else "") + pedaco.text.strip()
+                publicar({"tipo": "agente_texto", "id": turno, "texto": pedaco.text})
+
+        chamadas = [p.function_call for p in (parte.parts or []) if p.function_call]
+        if not chamadas:
+            break
+
+        contents.append(parte)
+        respostas_tool: list[Any] = []
+        for chamada in chamadas:
+            argumentos = dict(chamada.args or {})
+            usadas.append(chamada.name)
+            resultado = await _tool(session, chamada.name, argumentos, publicar, turno)
+            if chamada.name == "triar_ticket" and resultado.get("ok"):
+                publicar(
                     {
-                        "type": "tool_result",
-                        "tool_use_id": bloco.id,
-                        "content": json.dumps(resultado, ensure_ascii=False),
-                        "is_error": not resultado.get("ok", False),
+                        "tipo": "triagem",
+                        "via": "agente",
+                        "id": turno,
+                        "ferramenta": "triar_ticket",
+                        "ticket_id": argumentos.get("ticket_id"),
+                        "protocolo": resultado.get("protocolo"),
+                        "status": resultado.get("status"),
                     }
                 )
-                if bloco.name == "triar_ticket" and resultado.get("ok"):
-                    publicar(
-                        {
-                            "tipo": "triagem",
-                            "via": "agente",
-                            "id": turno,
-                            "ferramenta": "triar_ticket",
-                            "ticket_id": argumentos.get("ticket_id"),
-                            "protocolo": resultado.get("protocolo"),
-                            "status": resultado.get("status"),
-                        }
-                    )
-
-        if resposta.stop_reason != "tool_use" or not blocos_tool:
-            break
-        mensagens.append({"role": "user", "content": blocos_tool})
+            respostas_tool.append(
+                types.Part.from_function_response(
+                    name=chamada.name, response=resultado
+                )
+            )
+        contents.append(types.Content(role="user", parts=respostas_tool))
 
     if not texto_final:
         texto_final = "Tool calls executadas, mas o modelo não devolveu texto final."
-    publicar(
-        {
-            "tipo": "agente_resposta",
-            "id": turno,
-            "texto": texto_final,
-            "modo": "anthropic",
-            "ferramentas": usadas,
-        }
-    )
-    return {
-        "ok": True,
-        "id": turno,
-        "modo": "anthropic",
-        "resposta": texto_final,
-        "ferramentas": usadas,
-    }
+    return _finalizar(texto_final, usadas, publicar, turno, modo="gemini")
 
 
 def server_instructions() -> str:
@@ -467,6 +514,7 @@ async def conversar(
             "mensagem": mensagem,
         }
     )
-    if modo() == "anthropic":
-        return await _modo_anthropic(mensagem, session, publicar, turno)
+    if modo() == "gemini":
+        # `ticket_id` é usado apenas pelo roteador offline; o Gemini lê a mensagem.
+        return await _modo_gemini(mensagem, session, publicar, turno)
     return await _modo_demo(mensagem, ticket_id, session, publicar, turno)

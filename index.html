@@ -242,8 +242,8 @@
     function atualizarModoChat() {
       const el = $('chatModo');
       if (!el) return;
-      const modo = state.chat.modo === 'anthropic'
-        ? 'Anthropic (LLM real)' : 'Demo offline (roteador determinístico)';
+      const modo = state.chat.modo === 'gemini'
+        ? 'Gemini (LLM real)' : 'Demo offline (roteador determinístico)';
       el.textContent = modo + (state.chat.modelo ? ' · ' + state.chat.modelo : '')
         + ' · tools via MCP';
     }

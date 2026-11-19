@@ -9,7 +9,7 @@ devolve falsos alarmes (HTTP `4xx`) ao N1 já com a resposta pronta para o clien
 apenas bugs reais (`HTTP 5xx` com stack trace) para a engenharia N2.
 
 - **Stack:** Python 3.12+ · FastAPI + uvicorn · FastMCP (`mcp` 1.x) · SQLite · Tailwind CSS v4 · SSE
-- **Transportes:** stdio (Claude Desktop) e HTTP (navegador, mesma origem)
+- **Transportes:** stdio (Gemini via MCP e, opcionalmente, Claude Desktop) e HTTP (navegador, mesma origem)
 - **Autenticação:** fora de escopo nesta versão (uso local/demo)
 
 ---
@@ -22,7 +22,10 @@ ops-detective/
 ├── triagem.py                     # camada de domínio: SQLite + regras de triagem
 ├── server.py                      # adaptador MCP (FastMCP, stdio)
 ├── api.py                         # API HTTP + SSE + arquivos estáticos
-├── agente.py                      # agente de IA: roteador demo offline / tool-use Anthropic
+├── agente.py                      # agente web: roteador demo offline / tool-use Gemini
+├── gemini_cliente.py              # cliente Gemini compartilhado (.env, modelo, chave)
+├── chat_gemini.py                 # chatbot de terminal: Gemini + tools MCP
+├── .env.example                   # modelo de configuracao da chave (o .env e ignorado)
 ├── painel_ao_vivo.py              # lançador do painel de apresentação (porta 8080)
 ├── index.html                     # interface web
 ├── app.css                        # entrada do Tailwind v4 (tokens do design system)
@@ -69,13 +72,20 @@ $env:OPS_DETECTIVE_HOST = "127.0.0.1"
 .\.venv\Scripts\python.exe api.py
 ```
 
-O agente de IA roda em **modo demo offline** por padrão, sem chave nem internet. Para
-usar um Claude real (tool-use sobre as mesmas tools MCP):
+O agente de IA roda em **modo demo offline** quando não há chave. Para usar o
+Gemini (tool-use sobre as mesmas tools MCP), crie um `.env` na raiz com:
 
-```powershell
-$env:ANTHROPIC_API_KEY = "sk-ant-..."
-$env:OPS_AGENTE_MODELO = "claude-3-5-sonnet-latest"  # opcional
+```env
+GEMINI_API_KEY=sua_chave_aqui
+# OPS_AGENTE_MODELO=gemini-3.5-flash-lite   # opcional
+# OPS_AGENTE_MODO=gemini                    # opcional: demo força o roteador offline
 ```
+
+Também dá para exportar `GEMINI_API_KEY` no ambiente. O painel passa a exibir
+`Gemini (LLM real)` no chat; sem chave, exibe `Demo offline`. Para testar o fallback
+sem apagar a chave do `.env`, use `OPS_AGENTE_MODO=demo` ao iniciar a API. Chaves `AQ.`
+usam o endpoint do AI Studio por padrão — para forçar Vertex AI, defina
+`GEMINI_USAR_VERTEX=1` (exige API habilitada no projeto do Google Cloud).
 
 A tela traz KPIs (bloqueios N2, falsos alarmes N1 e economia estimada), quatro visões
 da fila, um painel lateral com evidências (status codes, endpoints, mensagens, stack
@@ -94,9 +104,9 @@ MCP separado — a API HTTP apenas repassa o resultado e publica o evento SSE.
 ### Recursos do painel
 
 - **Agente IA no painel** (chat flutuante no canto inferior direito): um chat que interpreta a mensagem e chama as tools do
-  `server.py` em processo separado. Sem `ANTHROPIC_API_KEY`, roda em **modo demo offline**
+  `server.py` em processo separado. Sem `GEMINI_API_KEY`, roda em **modo demo offline**
   com um roteador determinístico (`agente.py`): “Analise o TK-1005”, “Trie o TK-1005 e
-  gere o pacote”, estatísticas, fila e logs. Com a chave, um Claude escolhe as tools por
+  gere o pacote”, estatísticas, fila e logs. Com a chave, o Gemini escolhe as tools por
   tool-use. Uma sessão MCP por mensagem (não uma por tool), eventos SSE
   `agente_inicio` / `agente_tool` / `agente_resposta` / `agente_erro` e trilha visível no
   chat. O agente nunca escreve no SQLite direto — só pelas tools.
@@ -107,7 +117,7 @@ MCP separado — a API HTTP apenas repassa o resultado e publica o evento SSE.
 - **Trilha de Auditoria** — painel colapsável **“Atividade Recente do Agente MCP”**:
   todos os tickets com `triado_em`, do mais recente para o mais antigo, no formato
   `[Hora] TK-XXXX → Devolvido N1 (credencial_expirada)`. Como a origem é o banco,
-  triagens feitas no chat do Claude aparecem junto com as do painel.
+  triagens feitas pelo Gemini (ou pelo Claude Desktop) aparecem junto com as do painel.
 - **Botão `⚡ Injetar Chamado Ao Vivo`**: cria o `TK-1009` (ou o próximo protocolo livre)
   com 3 logs HTTP e um **incidente diferente a cada clique**, escolhido por rodízio em
   `CENARIOS_INJECAO` (`triagem.py`). O `TK-1009` mantém o cenário original: Startup Cloud
@@ -238,7 +248,7 @@ evidências no drawer e registre a triagem. Para a V2, complete com:
 3. abrir o `TK-1005`, clicar em **Gerar pacote engenharia** e copiar o card;
 4. abrir o chat flutuante **Agente IA** e digitar “Trie o TK-1005 e gere o pacote de engenharia” —
    o chat mostra as tools sendo chamadas e o card gerado;
-5. clicar em **⚡ Injetar Chamado Ao Vivo**, ver o `TK-1009` (429 da Startup Cloud) e,
+5. clicar em **Injetar Chamado Ao Vivo**, ver o `TK-1009` (429 da Startup Cloud) e,
    num segundo clique, o `TK-1010` com outro problema (401 da Loja Verão)
    aparecer e triá-lo na hora.
 
@@ -261,7 +271,7 @@ Invoke-RestMethod http://127.0.0.1:8000/api/tickets/5/analise
 .\.venv\Scripts\python.exe server.py
 ```
 
-O MCP se comunica por stdio — sem o Claude Desktop ele fica aguardando uma mensagem
+O MCP se comunica por stdio — sem um cliente (Gemini ou Claude Desktop) ele fica aguardando uma mensagem
 JSON-RPC. Para um teste programático, veja o exemplo de client em
 [`AGENTS.md`](AGENTS.md).
 
