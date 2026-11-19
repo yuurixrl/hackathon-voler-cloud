@@ -1,0 +1,18 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Banco gerado pelo setup_db.py
+suporte.db
+suporte.db-journal
+suporte.db-wal
+suporte.db-shm
+
+# Ambiente
+.env
+.vscode/
+.idea/
+.DS_Store

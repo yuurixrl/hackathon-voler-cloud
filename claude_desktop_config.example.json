@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "ops-detective": {
+      "command": "C:\\Users\\yurig\\hackathon-voler-cloud\\.venv\\Scripts\\python.exe",
+      "args": [
+        "C:\\Users\\yurig\\hackathon-voler-cloud\\server.py"
+      ]
+    }
+  }
+}
