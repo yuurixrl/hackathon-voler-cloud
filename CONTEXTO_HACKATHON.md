@@ -162,7 +162,8 @@ misturar incidentes diferentes do mesmo cliente.
 - [x] O agente devolve ao N1 com resposta pronta ao cliente nos falsos alarmes.
 - [x] V2: `/api/logs` expõe a telemetria global; o front tem a aba de Logs HTTP e o feed
   de auditoria derivado de `triado_em`.
-- [x] V2: `POST /api/injetar-chamado` cria o TK-1009+ com 3 logs `429` e publica SSE.
+- [x] V2: `POST /api/injetar-chamado` cria o TK-1009+ com 3 logs de um dos 7 cenários
+  rotacionados (429/401/500/403/500/402/403) e publica SSE.
 - [x] V2: `gerar_pacote_engenharia` devolve o card Jira/Linear para 5xx e recusa 4xx.
 
 ---

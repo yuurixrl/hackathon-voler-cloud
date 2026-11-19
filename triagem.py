@@ -520,11 +520,164 @@ def logs_globais(limite: int = 50) -> dict[str, Any]:
     return {"ok": True, "total": len(logs), "logs": logs}
 
 
+# Cada injeção ao vivo usa um incidente diferente. O rodízio é determinístico
+# (baseado no próximo protocolo), então não é preciso guardar estado no banco:
+# TK-1009 repete o cenário original da demo e os seguintes caminham pelo catálogo.
+TRACE_FATURAMENTO_NOVO = """Traceback (most recent call last):
+  File "/app/api/v1/atendimentos.py", line 63, in faturar_lote
+    total = billing_service.fechar_lote(atendimentos=body["ids"])
+  File "/app/services/billing_service.py", line 87, in fechar_lote
+    valor = item["cobranca"]["valor"]
+KeyError: 'cobranca'
+"""
+
+TRACE_POOL_EXPORTACAO = """Traceback (most recent call last):
+  File "/app/api/v1/dashboard.py", line 96, in exportar_obra
+    dados = await repo.relatorio_obra(obra_id=body["obra_id"])
+  File "/app/infra/database.py", line 121, in acquire
+    raise TimeoutError("pool de conexões esgotado (max=20)")
+TimeoutError: pool de conexões esgotado (max=20)
+"""
+
+CENARIOS_INJECAO = (
+    {
+        "chave": "rate_limit",
+        "rotulo": "Rate limit do plano free (HTTP 429)",
+        "destino": "N1",
+        "cliente_id": 3,
+        "cliente": "Startup Cloud",
+        "titulo": "Bloqueio total na integração de vendas",
+        "descricao": (
+            "Nossa integração de pedidos parou de sincronizar. Todas as chamadas "
+            "retornam 429 e as vendas do dia estão travadas. Precisamos de ajuda urgente!"
+        ),
+        "urgencia": "critica",
+        "metodo": "POST",
+        "endpoint": "/v1/pedidos/sincronizar",
+        "status_code": 429,
+        "mensagem_erro": "rate_limit_exceeded: plano=free limite=60 req/min",
+        "latencias": (980, 1120, 1260),
+    },
+    {
+        "chave": "api_key_webhook",
+        "rotulo": "Credencial expirada em webhook (HTTP 401)",
+        "destino": "N1",
+        "cliente_id": 1,
+        "cliente": "Loja Verão",
+        "titulo": "Webhooks de catálogo pararam de chegar",
+        "descricao": (
+            "Desde que trocamos a chave da API os webhooks de catálogo não chegam mais. "
+            "Nossa precificação está desatualizada e precisamos corrigir ainda hoje."
+        ),
+        "urgencia": "alta",
+        "metodo": "POST",
+        "endpoint": "/v1/webhooks/catalogo",
+        "status_code": 401,
+        "mensagem_erro": "invalid_api_key: credencial expirada (sk_live_9f2c...4e5f)",
+        "latencias": (18, 24, 31),
+    },
+    {
+        "chave": "bug_faturamento",
+        "rotulo": "Bug no faturamento em lote (HTTP 500)",
+        "destino": "N2",
+        "cliente_id": 5,
+        "cliente": "HealthData",
+        "titulo": "Faturamento em lote de atendimentos falhando",
+        "descricao": (
+            "O job noturno de faturamento quebrou depois da última deploy. Nenhuma "
+            "nota foi emitida e o erro 500 aparece para todos os atendimentos."
+        ),
+        "urgencia": "critica",
+        "metodo": "POST",
+        "endpoint": "/v1/atendimentos/faturar",
+        "status_code": 500,
+        "mensagem_erro": "internal_server_error: KeyError: 'cobranca'",
+        "stack_trace": TRACE_FATURAMENTO_NOVO,
+        "latencias": (2210, 2380, 2540),
+    },
+    {
+        "chave": "escopo_transportadoras",
+        "rotulo": "Escopo de API ausente (HTTP 403)",
+        "destino": "N1",
+        "cliente_id": 4,
+        "cliente": "LogExpress",
+        "titulo": "Integração com transportadoras fora do ar",
+        "descricao": (
+            "Ao consultar as transportadoras recebemos 403 dizendo que falta permissão. "
+            "A mesma credencial funcionava até ontem de manhã."
+        ),
+        "urgencia": "alta",
+        "metodo": "GET",
+        "endpoint": "/v1/integracoes/transportadoras",
+        "status_code": 403,
+        "mensagem_erro": "missing_scope: a credencial não possui o escopo 'integracoes:read'",
+        "latencias": (21, 26, 33),
+    },
+    {
+        "chave": "pool_exportacao",
+        "rotulo": "Pool de conexões esgotado (HTTP 500)",
+        "destino": "N2",
+        "cliente_id": 6,
+        "cliente": "Construtora Alfa",
+        "titulo": "Exportação de obra falha com erro 500",
+        "descricao": (
+            "A exportação do relatório de obra para o financeiro falha há uma hora. "
+            "A tela fica carregando e depois aparece 500. Precisamos do arquivo hoje."
+        ),
+        "urgencia": "critica",
+        "metodo": "POST",
+        "endpoint": "/v1/dashboard/obra/exportar",
+        "status_code": 500,
+        "mensagem_erro": "internal_server_error: TimeoutError ao adquirir conexão do pool",
+        "stack_trace": TRACE_POOL_EXPORTACAO,
+        "latencias": (30010, 30480, 30950),
+    },
+    {
+        "chave": "cartao_assinatura",
+        "rotulo": "Cartão recusado na renovação (HTTP 402)",
+        "destino": "N1",
+        "cliente_id": 2,
+        "cliente": "Fintech X",
+        "titulo": "Renovação da assinatura sendo recusada",
+        "descricao": (
+            "A renovação automática da assinatura está sendo recusada pelo gateway. "
+            "Já contestamos a cobrança com o banco e precisamos que verifiquem."
+        ),
+        "urgencia": "alta",
+        "metodo": "POST",
+        "endpoint": "/v1/checkout/assinatura",
+        "status_code": 402,
+        "mensagem_erro": "card_declined: do_not_honor (cartão de débito)",
+        "latencias": (510, 545, 580),
+    },
+    {
+        "chave": "conta_inadimplente",
+        "rotulo": "Conta bloqueada por inadimplência (HTTP 403)",
+        "destino": "N1",
+        "cliente_id": 7,
+        "cliente": "Boutique Estilo",
+        "titulo": "Bloqueio ao emitir nota fiscal",
+        "descricao": (
+            "Ao tentar emitir a nota fiscal do cliente a conta é bloqueada novamente. "
+            "Já fizemos o pagamento da fatura e precisamos liberar o acesso."
+        ),
+        "urgencia": "critica",
+        "metodo": "POST",
+        "endpoint": "/v1/notas-fiscais/emitir",
+        "status_code": 403,
+        "mensagem_erro": "account_suspended: fatura em atraso (verificar cadastro)",
+        "latencias": (22, 28, 35),
+    },
+)
+
+
 def injetar_chamado() -> dict[str, Any]:
-    """Cria um ticket inédito (TK-1009, TK-1010...) com 3 logs HTTP 429.
+    """Cria um ticket inédito (TK-1009, TK-1010...) com um incidente rotacionado.
 
     Usado ao vivo na apresentação para simular um cliente abrindo um chamado crítico.
-    O protocolo é sempre o próximo disponível, para repetir a demo quantas vezes quiser.
+    O protocolo é sempre o próximo disponível e o cenário vem de `CENARIOS_INJECAO`,
+    escolhido por rodízio: cada injeção é um problema diferente da anterior. O
+    primeiro continua sendo o 429 da Startup Cloud, como no roteiro original.
     """
     agora = _now().replace(microsecond=0)
     with _connect(readonly=False) as conn:
@@ -535,38 +688,48 @@ def injetar_chamado() -> dict[str, Any]:
                 numeros.append(int(encontrado.group(1)))
         proximo = max(numeros, default=1000) + 1
         novo_protocolo = f"TK-{proximo:04d}"
+        cenario = CENARIOS_INJECAO[(proximo - 1009) % len(CENARIOS_INJECAO)]
 
         conn.execute(
             """
             INSERT INTO tickets
                 (protocolo, cliente_id, titulo, descricao, canal, urgencia_reportada,
                  status, atribuido_para, criado_em, atualizado_em)
-            VALUES (?, 3, ?, ?, 'chat', 'critica', 'aberto', 'N1', ?, ?)
+            VALUES (?, ?, ?, ?, 'chat', ?, 'aberto', 'N1', ?, ?)
             """,
             (
                 novo_protocolo,
-                "Bloqueio total na integração de vendas",
-                (
-                    "Nossa integração de pedidos parou de sincronizar. Todas as chamadas "
-                    "retornam 429 e as vendas do dia estão travadas. Precisamos de ajuda urgente!"
-                ),
+                cenario["cliente_id"],
+                cenario["titulo"],
+                cenario["descricao"],
+                cenario["urgencia"],
                 agora.isoformat(),
                 agora.isoformat(),
             ),
         )
         ticket_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
 
-        mensagem = "rate_limit_exceeded: plano=free limite=60 req/min"
-        for indice in range(3):
-            momento = (agora - timedelta(minutes=2 - indice)).isoformat()
+        total_logs = len(cenario["latencias"])
+        for indice, latencia in enumerate(cenario["latencias"]):
+            momento = (agora - timedelta(minutes=total_logs - 1 - indice)).isoformat()
             conn.execute(
                 """
                 INSERT INTO logs_http
                     (cliente_id, timestamp, metodo, endpoint, status_code,
-                     latencia_ms, request_id, mensagem_erro)
-                VALUES (3, ?, 'POST', '/v1/pedidos/sincronizar', 429, ?, ?, ?)
+                     latencia_ms, request_id, mensagem_erro, stack_trace)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                (momento, 980 + indice * 140, f"req_live_{proximo}_{indice + 1:02d}", mensagem),
+                (
+                    cenario["cliente_id"],
+                    momento,
+                    cenario["metodo"],
+                    cenario["endpoint"],
+                    cenario["status_code"],
+                    latencia,
+                    f"req_live_{proximo}_{indice + 1:02d}",
+                    cenario["mensagem_erro"],
+                    cenario.get("stack_trace"),
+                ),
             )
         conn.commit()
 
@@ -574,9 +737,17 @@ def injetar_chamado() -> dict[str, Any]:
         "ok": True,
         "ticket_id": ticket_id,
         "protocolo": novo_protocolo,
-        "logs_inseridos": 3,
-        "cliente": "Startup Cloud",
-        "mensagem": f"Chamado {novo_protocolo} injetado ao vivo com 3 logs HTTP 429.",
+        "logs_inseridos": total_logs,
+        "cliente": cenario["cliente"],
+        "titulo": cenario["titulo"],
+        "cenario": cenario["chave"],
+        "rotulo": cenario["rotulo"],
+        "status_code": cenario["status_code"],
+        "destino_esperado": cenario["destino"],
+        "mensagem": (
+            f"Chamado {novo_protocolo} injetado: {cenario['rotulo']} em "
+            f"{cenario['endpoint']} ({cenario['cliente']})."
+        ),
     }
 
 

@@ -93,11 +93,16 @@ MCP separado — a API HTTP apenas repassa o resultado e publica o evento SSE.
   `[Hora] TK-XXXX → Devolvido N1 (credencial_expirada)`. Como a origem é o banco,
   triagens feitas no chat do Claude aparecem junto com as do painel.
 - **Botão `⚡ Injetar Chamado Ao Vivo`**: cria o `TK-1009` (ou o próximo protocolo livre)
-  para a Startup Cloud (plano free), urgência `crítica`, título *“Bloqueio total na
-  integração de vendas”* e 3 logs `POST /v1/pedidos/sincronizar` com `429
-  rate_limit_exceeded: plano=free limite=60 req/min`. O toast anuncia o chamado, o SSE
-  publica `novo_chamado` e a fila atualiza na hora. Pode ser repetido: o protocolo
-  incrementa (`TK-1009`, `TK-1010`, ...).
+  com 3 logs HTTP e um **incidente diferente a cada clique**, escolhido por rodízio em
+  `CENARIOS_INJECAO` (`triagem.py`). O `TK-1009` mantém o cenário original: Startup Cloud
+  (plano free), urgência `crítica`, *“Bloqueio total na integração de vendas”* e 3 logs
+  `POST /v1/pedidos/sincronizar` com `429 rate_limit_exceeded: plano=free limite=60 req/min`.
+  Os seguintes giram entre credencial expirada (401), bug no faturamento (500, com stack
+  trace), escopo ausente (403), pool esgotado (500, com stack trace), cartão recusado
+  (402) e conta inadimplente (403) — cada um com cliente, endpoint e mensagem próprios.
+  O toast anuncia o chamado e o problema (`rotulo`), o SSE publica `novo_chamado` e a fila
+  atualiza na hora. O protocolo incrementa (`TK-1009`, `TK-1010`, ...); o ciclo só se
+  repete depois de 7 injeções.
 - **Tool `gerar_pacote_engenharia`** (8ª tool do MCP): para bugs reais (5xx), gera um
   card estilo Jira/Linear com `titulo_issue`, `severidade`, `endpoint_afetado`,
   `request_ids_correlacionados`, `resumo_tecnico`, `stack_trace` e `criterio_aceite`.
@@ -121,7 +126,7 @@ MCP separado — a API HTTP apenas repassa o resultado e publica o evento SSE.
 | `POST` | `/api/agente/triagem` | triagem gravada pela tool MCP `triar_ticket` |
 | `POST` | `/api/agente/pacote` | card de engenharia gerado pela tool MCP `gerar_pacote_engenharia` |
 | `GET` | `/api/logs` | telemetria HTTP global (`limite`, padrão 50) |
-| `POST` | `/api/injetar-chamado` | cria ticket inédito + 3 logs 429 ao vivo |
+| `POST` | `/api/injetar-chamado` | cria ticket inédito + 3 logs do próximo cenário ao vivo |
 | `GET` | `/api/estatisticas` | placar por status/destino/categoria |
 | `GET` | `/api/playbook` | regras e categorias válidas |
 | `POST` | `/api/reset` | recria o banco de demonstração |
@@ -214,7 +219,8 @@ evidências no drawer e registre a triagem. Para a V2, complete com:
 2. triar o `TK-1001` (falso alarme) e conferir a linha nova na **Atividade Recente do
    Agente MCP**;
 3. abrir o `TK-1005`, clicar em **Gerar pacote engenharia** e copiar o card;
-4. clicar em **⚡ Injetar Chamado Ao Vivo**, ver o `TK-1009` (429 da Startup Cloud)
+4. clicar em **⚡ Injetar Chamado Ao Vivo**, ver o `TK-1009` (429 da Startup Cloud) e,
+   num segundo clique, o `TK-1010` com outro problema (401 da Loja Verão)
    aparecer e triá-lo na hora.
 
 **Resetar Fila (Demo)** devolve tudo aos 8 tickets abertos.

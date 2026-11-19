@@ -84,8 +84,12 @@ Porta/host da API via `OPS_DETECTIVE_PORT` (padrão `8000`) e `OPS_DETECTIVE_HOS
   status colorido e `<details>` de stack trace), **auditoria** derivada de
   `state.tickets.filter(t => t.triado_em)` ordenado por `triado_em` (inclui escritas do
   MCP no chat) e **botão de injeção** (`POST /api/injetar-chamado` → `TK-1009` ou próximo,
-  Startup Cloud/`cliente_id=3`, urgência `crítica`, 3 logs 429). O protocolo é calculado
-  pelo `MAX` dos `TK-\d+` existentes; o `id` do ticket é o `last_insert_rowid()`.
+  3 logs HTTP). O cenário vem de `CENARIOS_INJECAO`, escolhido por
+  `(proximo - 1009) % len(CENARIOS_INJECAO)`: 7 incidentes distintos (429, 401, 500, 403,
+  500, 402, 403), cada um com cliente/endpoint/mensagem próprios; o primeiro segue sendo
+  Startup Cloud/`cliente_id=3`, urgência `crítica`, 3 logs 429. O protocolo é calculado
+  pelo `MAX` dos `TK-\d+` existentes; o `id` do ticket é o `last_insert_rowid()`. A resposta
+  traz `cenario`, `rotulo`, `status_code`, `destino_esperado` e vai no SSE `novo_chamado`.
 - `gerar_pacote_engenharia` exige HTTP `5xx` na janela `_janela_do_ticket()`; para 4xx
   devolve `_erro(...)` (a API traduz para 400). O `resumo_tecnico` pega a última linha
   `File "…", line N` **antes** da exceção — não o entrypoint da API.
@@ -108,9 +112,11 @@ Porta/host da API via `OPS_DETECTIVE_PORT` (padrão `8000`) e `OPS_DETECTIVE_HOS
 | TK-1007 | Fintech X | só `202` (nada falhou) | N1 |
 | TK-1008 | Boutique Estilo | `403` conta inadimplente | N1 |
 
-Além destes, o botão de injeção cria o **TK-1009+** (Startup Cloud, 3× 429 em
-`POST /v1/pedidos/sincronizar`) durante a apresentação. Se mudar a massa de dados,
-atualize esta tabela e o roteiro no `README.md`.
+Além destes, o botão de injeção cria o **TK-1009+** com 3 logs de um catálogo rotacionado
+de 7 incidentes: `429` (Startup Cloud), `401` (Loja Verão), `500` (HealthData), `403`
+(LogExpress), `500` (Construtora Alfa), `402` (Fintech X) e `403` (Boutique Estilo), sempre
+com endpoint e mensagem diferentes. O `TK-1009` repete o cenário original da apresentação.
+Se mudar a massa de dados, atualize esta tabela e o roteiro no `README.md`.
 
 ## Rotas da API
 

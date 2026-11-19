@@ -115,13 +115,17 @@ Explique o desenho no quadro, junto ao diagrama acima:
 
 **4) Injeção de chamado ao vivo (≈1 min).** Clique em **⚡ Injetar Chamado Ao Vivo**.
 
-- Toast: **"Novo chamado TK-1009 recebido!"**
+- Toast: **"Novo chamado TK-1009: Rate limit do plano free (HTTP 429)"**
 - O `TK-1009` da Startup Cloud (plano free, urgência **CRÍTICA**) entra na fila com
   3 logs `429 rate_limit_exceeded: plano=free limite=60 req/min` em
   `POST /v1/pedidos/sincronizar`.
 - Abra o chamado no painel e deixe o agente analisar na hora: o destino sugerido é
   **N1** — é um limite de plano, não um bug. Trie pelo chat ou pelo formulário e mostre
-  a nova linha aparecendo na auditoria. Repita o botão se quiser ver o `TK-1010`.
+  a nova linha aparecendo na auditoria.
+- **Repita o botão:** o `TK-1010` já chega com outro problema (401 da Loja Verão em
+  `/v1/webhooks/catalogo`), o `TK-1011` com um 500 de faturamento (N2, com stack trace e
+  pacote de engenharia disponível) e assim por diante — 7 cenários distintos antes de
+  repetir. O toast e a aba **Logs HTTP** mostram a diferença na hora.
 
 ### 11:00 – 15:00 — Impacto de negócio e perguntas
 

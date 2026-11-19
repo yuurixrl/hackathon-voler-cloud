@@ -330,6 +330,9 @@ async def injetar_chamado() -> JSONResponse:
                 "ticket_id": resultado.get("ticket_id"),
                 "protocolo": resultado.get("protocolo"),
                 "cliente": resultado.get("cliente"),
+                "titulo": resultado.get("titulo"),
+                "rotulo": resultado.get("rotulo"),
+                "status_code": resultado.get("status_code"),
             }
         )
     return _json(resultado)
