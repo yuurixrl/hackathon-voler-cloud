@@ -70,9 +70,17 @@ $env:OPS_DETECTIVE_HOST = "127.0.0.1"
 
 A tela traz KPIs (bloqueios N2, falsos alarmes N1 e economia estimada), quatro visões
 da fila, um painel lateral com evidências (status codes, endpoints, mensagens, stack
-traces e logs) e o formulário para registrar a triagem. O badge **“Dados ao Vivo”**
-indica que o canal SSE está conectado: triagens e resets feitos em qualquer aba (ou
-pelo Claude Desktop, no mesmo banco) atualizam a interface automaticamente.
+traces e logs) e o formulário para registrar a triagem. Dois selos no topo mostram o
+estado de cada sistema: **`SQLite Conectado (Ao Vivo) · N aguardando triagem`** para o
+banco (SSE + polling de 1s) e **`MCP · 7 tools prontas`** para o agente.
+
+**As respostas não vêm prontas no HTML.** Ao abrir um chamado, o front chama
+`POST /api/agente/analisar`, que inicia `server.py` em **outro processo** via stdio e
+executa a tool `analisar_causa_raiz`. O drawer mostra o estado “Agente MCP analisando…”,
+a tool chamada, a latência medida e uma **trilha do agente** com as chamadas recentes.
+A sugestão de resposta ao cliente também nasce dentro dessa tool. O formulário é
+enviado por `POST /api/agente/triagem`, que executa `triar_ticket` no mesmo servidor
+MCP separado — a API HTTP apenas repassa o resultado e publica o evento SSE.
 
 ### Endpoints da API
 
@@ -85,6 +93,9 @@ pelo Claude Desktop, no mesmo banco) atualizam a interface automaticamente.
 | `GET` | `/api/tickets/{id}/analise` | evidências, hipótese e destino sugerido |
 | `GET` | `/api/tickets/{id}/logs` | logs HTTP (`limite`, `apenas_erros`, `incluir_stack_trace`) |
 | `POST` | `/api/tickets/{id}/triagem` | grava a triagem (JSON: `destino`, `categoria`, `diagnostico`, `acao_recomendada`, `resposta_cliente`) |
+| `GET` | `/api/agente/status` | tools expostas pelo `server.py` via stdio |
+| `POST` | `/api/agente/analisar` | análise gerada pela tool MCP `analisar_causa_raiz` |
+| `POST` | `/api/agente/triagem` | triagem gravada pela tool MCP `triar_ticket` |
 | `GET` | `/api/estatisticas` | placar por status/destino/categoria |
 | `GET` | `/api/playbook` | regras e categorias válidas |
 | `POST` | `/api/reset` | recria o banco de demonstração |

@@ -20,6 +20,9 @@
               <span id="liveBadge" class="inline-flex items-center gap-2 rounded-full border border-slate-edge bg-mist-gray px-2.5 py-1 text-[11px] font-semibold text-graphite">
                 <span id="liveDot" class="h-2 w-2 rounded-full bg-amber-500"></span><span id="liveText">Conectando ao SQLite…</span>
               </span>
+              <span id="mcpBadge" class="inline-flex items-center gap-2 rounded-full border border-slate-edge bg-mist-gray px-2.5 py-1 text-[11px] font-semibold text-graphite">
+                <span id="mcpDot" class="h-2 w-2 rounded-full bg-amber-500"></span><span id="mcpText">MCP · conectando…</span>
+              </span>
             </div>
             <h1 class="text-[25px] font-semibold tracking-tight text-carbon sm:text-[30px]">Triagem &amp; Diagnóstico em Tempo Real</h1>
             <p class="mt-1.5 text-sm text-pewter">Monitor inteligente classificando chamados e protegendo a engenharia de falsos positivos.</p>
@@ -95,6 +98,8 @@
     const state = {
       tickets: [], stats: null, categorias: [], activeTab: 'all', selectedId: null, selecionado: null,
       bancoOk: false, sseOk: false, pendentes: 0, mudados: new Set(), ultimaAssinatura: null,
+      mcp: { ok: false, ocupado: false, ferramentas: [], tempo_ms: null },
+      trilha: [],
     };
 
     const $ = (id) => document.getElementById(id);
@@ -146,6 +151,55 @@
     }
 
     function setSse(ok) { state.sseOk = ok; atualizarBadge(); }
+
+    function atualizarBadgeMcp() {
+      const badge = $('mcpBadge'), dot = $('mcpDot'), txt = $('mcpText'), m = state.mcp;
+      if (m.ocupado) {
+        badge.className = 'inline-flex items-center gap-2 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[11px] font-semibold text-amber-800';
+        dot.className = 'pulse-dot h-2 w-2 rounded-full bg-amber-500';
+        txt.textContent = 'MCP · chamando tool…';
+      } else if (m.ok) {
+        badge.className = 'inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700';
+        dot.className = 'h-2 w-2 rounded-full bg-emerald-500';
+        txt.textContent = 'MCP · ' + m.ferramentas.length + ' tools prontas';
+      } else {
+        badge.className = 'inline-flex items-center gap-2 rounded-full border border-red-200 bg-red-50 px-2.5 py-1 text-[11px] font-semibold text-red-700';
+        dot.className = 'h-2 w-2 rounded-full bg-red-500';
+        txt.textContent = 'MCP · indisponível';
+      }
+    }
+
+    function mcpOcupado(valor) { state.mcp.ocupado = valor; atualizarBadgeMcp(); }
+
+    async function carregarMcpStatus() {
+      const data = await api('/api/agente/status');
+      state.mcp.ok = !!(data.ok && (data.ferramentas || []).length);
+      state.mcp.ferramentas = data.ferramentas || [];
+      state.mcp.tempo_ms = data.tempo_ms;
+      atualizarBadgeMcp();
+      if (!state.mcp.ok) toast('Servidor MCP não respondeu: ' + (data.erro || 'erro desconhecido'), 'aviso');
+    }
+
+    function registrarTrilha(ferramenta, argumentos, tempoMs) {
+      state.trilha.unshift({
+        ferramenta: ferramenta,
+        argumentos: argumentos,
+        tempo_ms: tempoMs,
+        quando: new Date().toLocaleTimeString('pt-BR'),
+      });
+      state.trilha = state.trilha.slice(0, 6);
+    }
+
+    function renderTrilha() {
+      if (!state.trilha.length) return '';
+      return '<section><p class="text-xs font-semibold uppercase tracking-wider text-silver-wash">Trilha do agente MCP</p>'
+        + '<div class="mt-2 space-y-1 rounded-xl border border-mist-gray bg-paper-white p-3">'
+        + state.trilha.map(e => '<div class="flex flex-wrap items-center justify-between gap-2">'
+          + '<span class="mono text-[11px] text-cobalt-signal">▸ ' + esc(e.ferramenta) + '(' + esc(e.argumentos) + ')</span>'
+          + '<span class="mono text-[10px] text-silver-wash">' + esc(e.tempo_ms) + ' ms · ' + esc(e.quando) + '</span>'
+          + '</div>').join('')
+        + '</div></section>';
+    }
 
     function assinatura(lista) {
       return lista.map(t => [t.id, t.status, t.triado_em || '', t.categoria || '', t.diagnostico || ''].join(':')).join('|');
@@ -330,16 +384,39 @@
     }
 
     async function carregarDrawer(id) {
+      // Estado visivel de geracao: o diagnostico NAO vem pronto do HTML.
+      $('drawerContent').innerHTML =
+        '<div class="rounded-xl border border-mist-gray p-5">'
+        + '<div class="flex items-center gap-3">'
+        + '<span class="h-4 w-4 animate-spin rounded-full border-2 border-cobalt-signal border-t-transparent"></span>'
+        + '<div><p class="text-sm font-semibold text-carbon">Agente MCP analisando…</p>'
+        + '<p id="etapaAgente" class="mono mt-1 text-xs text-pewter">conectando ao servidor MCP…</p></div></div>'
+        + '<div class="mt-4 space-y-2"><div class="h-2 w-3/4 animate-pulse rounded bg-mist-gray"></div>'
+        + '<div class="h-2 w-1/2 animate-pulse rounded bg-mist-gray"></div>'
+        + '<div class="h-2 w-2/3 animate-pulse rounded bg-mist-gray"></div></div></div>';
+      const etapa = setTimeout(() => {
+        const el = $('etapaAgente');
+        if (el) el.textContent = 'tool: analisar_causa_raiz(ticket_id=' + id + ')';
+      }, 350);
+
+      mcpOcupado(true);
       const [detalhe, analise, logs] = await Promise.all([
         api('/api/tickets/' + id),
-        api('/api/tickets/' + id + '/analise'),
+        api('/api/agente/analisar', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ticket_id: id }),
+        }),
         api('/api/tickets/' + id + '/logs?limite=12&apenas_erros=false'),
       ]);
+      clearTimeout(etapa);
+      mcpOcupado(false);
       if (state.selectedId !== id) return;
       if (!detalhe.ok) {
         $('drawerContent').innerHTML = '<p class="text-sm text-red-600">' + esc(detalhe.erro || 'Falha ao carregar o ticket.') + '</p>';
         return;
       }
+      if (analise.ok) registrarTrilha('analisar_causa_raiz', 'ticket_id=' + id, analise.tempo_ms);
       state.selecionado = {
         ticket: detalhe.ticket,
         analise: analise.ok ? analise : null,
@@ -368,9 +445,8 @@
     }
 
     function respostaSugerida(t, analise) {
-      const causa = analise?.hipotese || 'estamos analisando o ocorrido com prioridade';
-      const passo = analise?.proximo_passo || 'Seguimos acompanhando o caso por este chamado.';
-      return 'Olá, ' + (t.cliente || 'cliente') + '. Identificamos a causa do ocorrido: ' + causa + '. ' + passo;
+      return analise?.resposta_cliente_sugerida
+        || 'Olá, ' + (t.cliente || 'cliente') + '. Estamos analisando o ocorrido com prioridade neste chamado.';
     }
 
     function renderDrawer() {
@@ -452,12 +528,14 @@
         + '<span class="rounded-full border border-slate-edge bg-mist-gray/60 px-2 py-1 text-graphite">canal: ' + esc(t.canal || '—') + '</span>'
         + '<span class="rounded-full border border-slate-edge bg-mist-gray/60 px-2 py-1 text-graphite">aberto em ' + esc(fmtData(t.criado_em)) + '</span>'
         + '</div></section>'
+        + renderTrilha()
 
         + (analise
           ? '<section><p class="text-xs font-semibold uppercase tracking-wider text-silver-wash">Diagnóstico automático</p>'
             + '<div class="mt-2 rounded-xl border border-mist-gray p-4">'
             + '<div class="flex flex-wrap items-center gap-2">'
             + '<span class="rounded-full border px-2 py-1 text-[10px] font-semibold ' + (destino === 'N2' ? 'border-red-200 bg-red-50 text-red-700' : 'border-emerald-200 bg-emerald-50 text-emerald-800') + '">destino sugerido: ' + esc(destino) + '</span>'
+            + '<span class="rounded-full border border-cobalt-signal/40 bg-cobalt-signal/10 px-2 py-1 text-[10px] font-semibold text-cobalt-signal">via MCP · analisar_causa_raiz · ' + esc(analise.tempo_ms ?? '—') + ' ms</span>'
             + '<span class="rounded-full border border-slate-edge bg-mist-gray/60 px-2 py-1 text-[10px] font-semibold text-graphite">' + (analise.janela_analisada?.logs_analisados ?? 0) + ' logs na janela</span>'
             + '<span class="rounded-full border border-slate-edge bg-mist-gray/60 px-2 py-1 text-[10px] font-semibold text-graphite">' + esc(latencia) + '</span>'
             + '</div>'
@@ -484,6 +562,7 @@
       const botao = $('btnTriar');
       const erroEl = $('formErro');
       const payload = {
+        ticket_id: id,
         destino: $('fDestino').value,
         categoria: $('fCategoria').value,
         diagnostico: $('fDiagnostico').value,
@@ -491,14 +570,16 @@
         resposta_cliente: $('fResposta').value,
       };
       botao.disabled = true;
-      botao.textContent = 'Salvando…';
+      botao.textContent = 'Chamando tool MCP…';
       erroEl.classList.add('hidden');
+      mcpOcupado(true);
 
-      const res = await api('/api/tickets/' + id + '/triagem', {
+      const res = await api('/api/agente/triagem', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
+      mcpOcupado(false);
 
       if (!res.ok) {
         erroEl.textContent = res.erro || 'Não foi possível registrar a triagem.';
@@ -508,7 +589,8 @@
         return;
       }
 
-      toast('Triagem registrada: ' + res.protocolo + ' → ' + res.atribuido_para, 'ok');
+      registrarTrilha('triar_ticket', 'ticket_id=' + id + ', destino=' + res.atribuido_para, res.tempo_ms);
+      toast('MCP gravou a triagem: ' + res.protocolo + ' → ' + res.atribuido_para + ' (' + res.tempo_ms + ' ms)', 'ok');
       (res.avisos || []).forEach(a => toast(a, 'aviso'));
       await atualizar('triage');
       await carregarDrawer(id);
@@ -568,7 +650,7 @@
 
     (async () => {
       await carregarPlaybook();
-      await atualizar('init');
+      await Promise.all([atualizar('init'), carregarMcpStatus()]);
       conectarSSE();
       // Rede de seguranca: o SSE entrega na hora, o polling de 1s garante que
       // uma escrita feita pelo MCP no SQLite tambem apareca sem recarregar a pagina.

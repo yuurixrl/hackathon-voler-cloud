@@ -10,7 +10,10 @@ Endpoints principais:
     GET  /api/tickets/{id}          -> ticket + cliente + volume de logs
     GET  /api/tickets/{id}/analise  -> evidências + hipótese + destino sugerido
     GET  /api/tickets/{id}/logs     -> últimos logs HTTP do cliente do ticket
-    POST /api/tickets/{id}/triagem  -> grava a triagem
+    POST /api/tickets/{id}/triagem  -> grava a triagem (direto, legado)
+    POST /api/agente/analisar       -> analise gerada pelo MCP em processo separado
+    POST /api/agente/triagem        -> triagem gravada pelo MCP em processo separado
+    GET  /api/agente/status         -> tools expostas pelo servidor MCP
     GET  /api/estatisticas          -> placar
     GET  /api/playbook              -> regras + categorias válidas
     POST /api/reset                 -> recria o banco de demonstração
@@ -25,11 +28,16 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import sys
+import time
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
 import uvicorn
 from fastapi import FastAPI, Request
+from mcp import ClientSession, StdioServerParameters
+from mcp.client.stdio import stdio_client
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -99,6 +107,50 @@ def _cliente_id_do_ticket(ticket_id: int) -> int | None:
     if not detalhe.get("ok"):
         return None
     return int(detalhe["ticket"]["cliente_id"])
+
+
+# --------------------------------------------------------------------------- #
+# Ponte MCP: o front fala com o servidor MCP como o Claude Desktop fala
+# --------------------------------------------------------------------------- #
+
+def _parametros_mcp() -> StdioServerParameters:
+    """Lanca `server.py` em outro processo, exatamente como o Claude Desktop faz."""
+    return StdioServerParameters(
+        command=sys.executable,
+        args=[str(BASE_DIR / "server.py")],
+        cwd=str(BASE_DIR),
+    )
+
+
+@asynccontextmanager
+async def _sessao_mcp():
+    async with stdio_client(_parametros_mcp()) as (read, write):
+        async with ClientSession(read, write) as session:
+            await session.initialize()
+            yield session
+
+
+async def _chamar_mcp(ferramenta: str, argumentos: dict[str, Any]) -> dict[str, Any]:
+    """Executa uma tool do MCP e devolve o JSON com proveniencia e latencia."""
+    inicio = time.perf_counter()
+
+    def finalizar(payload: dict[str, Any]) -> dict[str, Any]:
+        payload["ferramenta"] = ferramenta
+        payload["origem"] = "MCP · server.py (processo separado)"
+        payload["tempo_ms"] = round((time.perf_counter() - inicio) * 1000)
+        return payload
+
+    try:
+        async with _sessao_mcp() as session:
+            resposta = await asyncio.wait_for(
+                session.call_tool(ferramenta, argumentos), timeout=30
+            )
+        texto = resposta.content[0].text if resposta.content else ""
+        if resposta.isError or not texto:
+            return finalizar({"ok": False, "erro": texto or "tool MCP retornou vazio"})
+        return finalizar(json.loads(texto))
+    except Exception as exc:  # noqa: BLE001 - erro devolvido como JSON, nunca 500
+        return finalizar({"ok": False, "erro": f"falha na ponte MCP: {exc}"})
 
 
 # --------------------------------------------------------------------------- #
@@ -183,6 +235,68 @@ def triar_ticket(ticket_id: int, dados: TriagemIn) -> JSONResponse:
                 "ticket_id": ticket_id,
                 "protocolo": resultado.get("protocolo"),
                 "status": resultado.get("status"),
+            }
+        )
+    return _json(resultado)
+
+
+class AgenteAnaliseIn(BaseModel):
+    ticket_id: int
+
+
+class AgenteTriagemIn(TriagemIn):
+    ticket_id: int
+
+
+@app.get("/api/agente/status")
+async def agente_status() -> JSONResponse:
+    """Prova que o MCP esta vivo: lista as tools do `server.py` via stdio."""
+    inicio = time.perf_counter()
+    try:
+        async with _sessao_mcp() as session:
+            ferramentas = [t.name for t in (await session.list_tools()).tools]
+        return _json(
+            {
+                "ok": True,
+                "servidor": "server.py (stdio, processo separado)",
+                "ferramentas": ferramentas,
+                "tempo_ms": round((time.perf_counter() - inicio) * 1000),
+            }
+        )
+    except Exception as exc:  # noqa: BLE001
+        return _json({"ok": False, "erro": f"falha na ponte MCP: {exc}"})
+
+
+@app.post("/api/agente/analisar")
+async def agente_analisar(dados: AgenteAnaliseIn) -> JSONResponse:
+    """A analise do drawer vem da tool MCP, nao da funcao local da API."""
+    return _json(await _chamar_mcp("analisar_causa_raiz", {"ticket_id": dados.ticket_id}))
+
+
+@app.post("/api/agente/triagem")
+async def agente_triar(dados: AgenteTriagemIn) -> JSONResponse:
+    """A triagem e gravada pela tool MCP; a API apenas repassa e avisa via SSE."""
+    resultado = await _chamar_mcp(
+        "triar_ticket",
+        {
+            "ticket_id": dados.ticket_id,
+            "destino": dados.destino,
+            "categoria": dados.categoria,
+            "diagnostico": dados.diagnostico,
+            "acao_recomendada": dados.acao_recomendada,
+            "resposta_cliente": dados.resposta_cliente,
+        },
+    )
+    if resultado.get("ok"):
+        bus.publish(
+            {
+                "tipo": "triagem",
+                "via": "MCP",
+                "ferramenta": "triar_ticket",
+                "ticket_id": dados.ticket_id,
+                "protocolo": resultado.get("protocolo"),
+                "status": resultado.get("status"),
+                "tempo_ms": resultado.get("tempo_ms"),
             }
         )
     return _json(resultado)

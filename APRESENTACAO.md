@@ -11,17 +11,24 @@ infraestrutura real** — e não é só um chat que responde texto.
 | **Direita — O Agente** | Claude Desktop com as 7 tools do `server.py` (MCP/stdio) | O modelo investigando logs e chamando `analisar_causa_raiz` / `triar_ticket` |
 
 ```text
- Claude / Codex (chat)  -- triar_ticket() -->  server.py (MCP)
-                                                     │ UPDATE no SQLite
- painel_ao_vivo.py (8080) -- GET /api/* --------> suporte.db
+ Claude / Codex (chat) -- tools MCP --> server.py (stdio) -- UPDATE --> suporte.db
+                                             ▲
+ painel (8080) -- POST /api/agente/* --> api.py --+ (inicia server.py em outro processo)
         │
-        └── SSE + polling 1s --> index.html destaca o card e recalcula os KPIs
+        └── SSE + polling 1s <--- suporte.db ---> card pisca e KPIs mudam
 ```
 
-O painel **não** é um chat: ele lê o mesmo banco que o MCP escreve. Quando o agente
-triagem um chamado, o card pisca (**verde** = devolvido ao N1, **vermelho** = escalado
-ao N2), ganha o selo **`ATUALIZADO AGORA`**, mostra o diagnóstico gravado e libera o
-botão de copiar resposta. O badge no topo passa a exibir
+O painel **não** é um chat: ele lê o mesmo banco que o MCP escreve. E, para provar que
+a resposta não está decorada no HTML, o próprio painel também passa pelo MCP: ao abrir
+um chamado, ele mostra **“Agente MCP analisando…”**, dispara a tool
+`analisar_causa_raiz` em `server.py` (processo separado, ~2 s de subida) e só depois
+exibe o diagnóstico, a hipótese e a resposta sugerida — com a **trilha das tool calls**
+e a latência de cada uma. O selo **`MCP · 7 tools prontas`** fica verde no topo quando
+o servidor responde; fica âmbar enquanto uma tool está em execução.
+
+Quando o agente triar um chamado, o card pisca (**verde** = devolvido ao N1,
+**vermelho** = escalado ao N2), ganha o selo **`ATUALIZADO AGORA`**, mostra o diagnóstico
+gravado e libera o botão de copiar resposta. O outro badge exibe
 **`SQLite Conectado (Ao Vivo) · N aguardando triagem`**.
 
 > O SSE entrega a mudança na hora; o polling de 1 segundo é a rede de segurança caso a
@@ -63,6 +70,8 @@ Digite no chat da direita:
 O que a banca vê:
 
 - o agente consulta os logs e encontra 6 erros `HTTP 401` (API key expirada há 2 dias);
+- ao abrir o chamado no painel, o selo MCP fica âmbar e aparece
+  `analisar_causa_raiz(ticket_id=1)` com a animação de análise;
 - à esquerda, o card **TK-1001 pisca em verde**, muda para **DEVOLVIDO N1 (FALSO ALARME)**,
   mostra o diagnóstico vindo do SQLite e libera **Copiar Resposta N1**.
 

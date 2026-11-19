@@ -324,6 +324,16 @@ def analisar_causa_raiz(ticket_id: int) -> dict[str, Any]:
     if len(latencias) and max(latencias) >= 20000:
         alertas.append(f"Latência máxima de {max(latencias)} ms (possível timeout/sobrecarga)")
 
+    proximo_passo = (
+        "Escalar para N2 com o stack trace e os request_ids."
+        if destino == "N2"
+        else "Devolver ao N1 com orientação ao cliente e registrar a triagem."
+    )
+    resposta_sugerida = (
+        f"Olá, {ticket['cliente']}. Identificamos a causa do ocorrido: {hipotese}. "
+        f"{proximo_passo} Estamos à disposição para qualquer dúvida neste chamado."
+    )
+
     return {
         "ok": True,
         "ticket": {
@@ -354,11 +364,8 @@ def analisar_causa_raiz(ticket_id: int) -> dict[str, Any]:
         "hipotese": hipotese,
         "destino_sugerido": destino,
         "alertas_cadastro": alertas,
-        "proximo_passo": (
-            "Escalar para N2 com o stack trace e os request_ids."
-            if destino == "N2"
-            else "Devolver ao N1 com orientação ao cliente e registrar a triagem."
-        ),
+        "proximo_passo": proximo_passo,
+        "resposta_cliente_sugerida": resposta_sugerida,
     }
 
 

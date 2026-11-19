@@ -47,7 +47,7 @@ Porta/host da API via `OPS_DETECTIVE_PORT` (padrão `8000`) e `OPS_DETECTIVE_HOS
 | `setup_db.py` | schema + massa de dados (clientes, tickets, logs) |
 | `triagem.py` | domínio: conexão SQLite, consultas, análise de causa raiz, triagem, stats, playbook, health e reset |
 | `server.py` | adaptador MCP: 7 tools + 1 resource (`playbook://triagem`) |
-| `api.py` | adaptador HTTP: rotas `/api/*`, SSE, arquivos estáticos |
+| `api.py` | adaptador HTTP: rotas `/api/*`, ponte MCP via stdio, SSE, arquivos estáticos |
 | `painel_ao_vivo.py` | lançador do painel de apresentação na porta 8080 (reusa `api.app`) |
 | `index.html` | front-end (KPIs, abas, drawer, evidências, formulário, SSE + polling 1s) |
 | `app.css` | entrada Tailwind v4 (`@import`, `@source`, tokens do design system) |
@@ -72,6 +72,13 @@ Porta/host da API via `OPS_DETECTIVE_PORT` (padrão `8000`) e `OPS_DETECTIVE_HOS
 - SSE publica `{"tipo": "triagem", ...}` e `{"tipo": "reset"}` no barramento em memória;
   o front recarrega fila/estatísticas ao receber. Eventos de clientes lentos são
   descartados (`QueueFull`) para não travar a API.
+- A análise e a triagem do drawer passam pela **ponte MCP**: `api.py` inicia
+  `server.py` em outro processo via `stdio_client`, chama `analisar_causa_raiz` /
+  `triar_ticket` e devolve o JSON com `ferramenta`, `origem` e `tempo_ms`. O front
+  mostra o estado “Agente MCP analisando…”, o selo MCP âmbar e a trilha de tool calls.
+  A resposta sugerida (`resposta_cliente_sugerida`) é composta dentro da tool, no
+  `triagem.py`, não no JavaScript. Rotas legadas `/api/tickets/{id}/analise` e
+  `/triagem` continuam funcionando, mas o front não as usa mais.
 - O front também faz **polling de 1s** em `/api/tickets`, `/api/estatisticas` e
   `/api/health` como rede de segurança. Ele compara uma assinatura
   (`id:status:triado_em:categoria:diagnostico`) e, quando detecta uma escrita vinda do
@@ -97,7 +104,9 @@ Se mudar a massa de dados, atualize esta tabela e o roteiro no `README.md`.
 
 `GET /` · `GET /api/health` · `GET /api/tickets` · `GET /api/tickets/{id}` ·
 `GET /api/tickets/{id}/analise` · `GET /api/tickets/{id}/logs` ·
-`POST /api/tickets/{id}/triagem` · `GET /api/estatisticas` · `GET /api/playbook` ·
+`POST /api/tickets/{id}/triagem` · `GET /api/agente/status` ·
+`POST /api/agente/analisar` · `POST /api/agente/triagem` ·
+`GET /api/estatisticas` · `GET /api/playbook` ·
 `POST /api/reset` · `GET /api/events`.
 
 ## Teste rápido via cliente MCP (stdio)
@@ -136,6 +145,9 @@ Invoke-RestMethod http://127.0.0.1:8000/api/tickets/5/analise
 - Ao apontar o Claude Desktop para o servidor, use o Python **do `.venv`**;
   o Python global não tem o pacote `mcp` instalado.
 - `suporte.db` não é versionado: rode `setup_db.py` depois de clonar.
+- Cada chamada à ponte MCP sobe um `server.py` novo (~1,5–2 s no Windows). Isso é
+  intencional na demo — o spinner visível prova que a resposta está sendo gerada —
+  mas não use essas rotas para carga: o timeout do tool é 30 s.
 - O navegador carrega `static/app.css`, não `app.css`: após alterar HTML/CSS, rode
   `npm run build:css`, senão as mudanças não aparecem.
 - `npm install` só é necessário para gerar o CSS; a API em si roda só com o `requirements.txt`.
