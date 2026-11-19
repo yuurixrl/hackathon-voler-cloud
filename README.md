@@ -93,7 +93,7 @@ MCP separado — a API HTTP apenas repassa o resultado e publica o evento SSE.
 
 ### Recursos do painel
 
-- **Agente IA no painel** (6ª aba): um chat que interpreta a mensagem e chama as tools do
+- **Agente IA no painel** (chat flutuante no canto inferior direito): um chat que interpreta a mensagem e chama as tools do
   `server.py` em processo separado. Sem `ANTHROPIC_API_KEY`, roda em **modo demo offline**
   com um roteador determinístico (`agente.py`): “Analise o TK-1005”, “Trie o TK-1005 e
   gere o pacote”, estatísticas, fila e logs. Com a chave, um Claude escolhe as tools por
@@ -236,7 +236,7 @@ evidências no drawer e registre a triagem. Para a V2, complete com:
 2. triar o `TK-1001` (falso alarme) e conferir a linha nova na **Atividade Recente do
    Agente MCP**;
 3. abrir o `TK-1005`, clicar em **Gerar pacote engenharia** e copiar o card;
-4. abrir a aba **Agente IA** e digitar “Trie o TK-1005 e gere o pacote de engenharia” —
+4. abrir o chat flutuante **Agente IA** e digitar “Trie o TK-1005 e gere o pacote de engenharia” —
    o chat mostra as tools sendo chamadas e o card gerado;
 5. clicar em **⚡ Injetar Chamado Ao Vivo**, ver o `TK-1009` (429 da Startup Cloud) e,
    num segundo clique, o `TK-1010` com outro problema (401 da Loja Verão)

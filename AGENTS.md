@@ -53,7 +53,7 @@ Porta/host da API via `OPS_DETECTIVE_PORT` (padrão `8000`) e `OPS_DETECTIVE_HOS
 | `api.py` | adaptador HTTP: rotas `/api/*`, ponte MCP via stdio, SSE, arquivos estáticos |
 | `agente.py` | agente de IA: roteador demo offline, tool-use Anthropic, eventos `agente_*` |
 | `painel_ao_vivo.py` | lançador do painel de apresentação na porta 8080 (reusa `api.app`) |
-| `index.html` | front-end (KPIs, 6 abas, chat do agente, auditoria, injeção, drawer com pacote N2, SSE + polling 1s) |
+| `index.html` | front-end (KPIs, 5 abas, chat flutuante do agente, auditoria, injeção, drawer com pacote N2, SSE + polling 1s) |
 | `app.css` | entrada Tailwind v4 (`@import`, `@source`, tokens do design system) |
 | `static/app.css` | CSS compilado, servido ao navegador — **versionado** |
 | `package.json` | scripts `build:css` / `watch:css` (Tailwind v4) |

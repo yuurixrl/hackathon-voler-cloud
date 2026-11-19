@@ -8,11 +8,11 @@ real** — com telemetria, auditoria, injeção de incidente e entrega pronta pa
 | Metade da tela | O que roda | O que a banca vê |
 |---|---|---|
 | **Esquerda — Sistema da empresa** | `painel_ao_vivo.py` → `http://127.0.0.1:8080` | Fila real do `suporte.db`, aba de logs HTTP, auditoria e cards que piscam no instante da escrita |
-| **Direita — O Agente** | Claude Desktop (com chave) **ou** a aba **Agente IA** do próprio painel (offline) — ambos sobre as 8 tools do `server.py` via MCP/stdio | O modelo/roteador investigando logs e chamando `analisar_causa_raiz`, `triar_ticket` e `gerar_pacote_engenharia` em tempo real |
+| **Direita — O Agente** | Claude Desktop (com chave) **ou** o chat flutuante **Agente IA** do próprio painel (offline) — ambos sobre as 8 tools do `server.py` via MCP/stdio | O modelo/roteador investigando logs e chamando `analisar_causa_raiz`, `triar_ticket` e `gerar_pacote_engenharia` em tempo real |
 
 ```text
  Claude Desktop (direita) -- tools MCP ------------------+
- aba Agente IA (esquerda) -- POST /api/agente/chat ------+--> server.py (stdio) -- UPDATE --> suporte.db
+ chat Agente IA (esquerda) -- POST /api/agente/chat ------+--> server.py (stdio) -- UPDATE --> suporte.db
                                                         ▲       ▲
  painel (8080) -- POST /api/agente/* --> api.py --+       | leitura mode=ro
          │                                                         |
@@ -20,8 +20,8 @@ real** — com telemetria, auditoria, injeção de incidente e entrega pronta pa
          └── SSE (agente_*, triagem, ...) <--- suporte.db ---> card pisca, KPIs mudam, auditoria cresce
 ```
 
-O painel **agora também é um chat**: a 6ª aba **Agente IA** interpreta a mensagem e chama
-as mesmas tools do `server.py`. Sem `ANTHROPIC_API_KEY` ela roda em **modo demo offline**
+O painel **agora também é um chat**: o chat flutuante **Agente IA** (botão inferior direito) interpreta a mensagem e chama
+as mesmas tools do `server.py`. Sem `ANTHROPIC_API_KEY` ele roda em **modo demo offline**
 (roteador determinístico em `agente.py`); com a chave, faz tool-use real com Claude. Nos
 dois casos o agente **nunca escreve direto no SQLite** — toda ação passa pelo MCP. O chat
 mostra o modo ativo, a trilha de tools (`agente_inicio` → `agente_tool` →
@@ -102,7 +102,7 @@ Explique o desenho no quadro, junto ao diagrama acima:
 - Role até **Atividade Recente do Agente MCP**: `[Hora] TK-1001 → Devolvido N1
   (credencial_expirada)` já está lá.
 
-**2) Agente IA dentro do painel (≈1 min).** Clique na 6ª aba **Agente IA**. O selo mostra
+**2) Agente IA dentro do painel (≈1 min).** Clique no botão flutuante **Agente IA** no canto inferior direito. O selo mostra
 **"Demo offline (roteador determinístico) · tools via MCP"** — sem chave paga e sem
 internet. Digite:
 
@@ -168,7 +168,7 @@ reais para o N2** — e o KPI **Economia Estimada de Dev** chega a **3h 30m**
 - Se o modelo não usar as ferramentas, cite os nomes: `analisar_causa_raiz`,
   `buscar_logs_http`, `triar_ticket`, `gerar_pacote_engenharia` e
   `estatisticas_triagem`.
-- A aba **Agente IA** funciona sem `ANTHROPIC_API_KEY` (modo demo offline). Se o
+- O chat **Agente IA** funciona sem `ANTHROPIC_API_KEY` (modo demo offline). Se o
   organizador configurar a chave, o selo muda para **Anthropic (LLM real)** e o Claude
   escolhe as tools sozinho; a trilha SSE e as regras de negócio são as mesmas.
 - O destino correto é determinado pela regra em `triagem.py`: `4xx → N1`,

@@ -28,7 +28,7 @@
             <p class="mt-1.5 text-sm text-pewter">Monitor inteligente classificando chamados e protegendo a engenharia de falsos positivos.</p>
           </div>
           <div class="flex flex-col gap-2 sm:flex-row">
-            <button id="injectBtn" class="h-10 rounded-full border border-orchid-glaze bg-orchid-glaze/10 px-4 text-sm font-semibold text-carbon transition hover:bg-orchid-glaze/20">⚡ Injetar Chamado Ao Vivo</button>
+            <button id="injectBtn" class="h-10 rounded-full border border-orchid-glaze bg-orchid-glaze/10 px-4 text-sm font-semibold text-carbon transition hover:bg-orchid-glaze/20">Injetar Chamado Ao Vivo</button>
             <button id="simulateBtn" class="h-10 rounded-full border border-slate-edge bg-white px-4 text-sm font-semibold text-graphite transition hover:border-cobalt-signal hover:text-cobalt-signal">Analisar Próximo</button>
             <button id="resetBtn" class="h-10 rounded-full bg-cobalt-signal px-4 text-sm font-semibold text-white shadow-subtle-2 transition hover:opacity-90">Resetar Fila (Demo)</button>
           </div>
@@ -57,29 +57,8 @@
           <button data-tab="n1" class="tab whitespace-nowrap border-b-2 border-transparent px-3 pb-3 text-sm font-medium text-pewter">Devolvidos N1 (Falso Alarme) <span id="countN1" class="ml-1 rounded-full bg-mist-gray px-1.5 py-0.5 text-xs">0</span></button>
           <button data-tab="n2" class="tab whitespace-nowrap border-b-2 border-transparent px-3 pb-3 text-sm font-medium text-pewter">Fila Engenharia (N2) <span id="countN2" class="ml-1 rounded-full bg-mist-gray px-1.5 py-0.5 text-xs">0</span></button>
           <button data-tab="logs" class="tab whitespace-nowrap border-b-2 border-transparent px-3 pb-3 text-sm font-medium text-pewter">Logs HTTP (Telemetria) <span id="countLogs" class="ml-1 rounded-full bg-mist-gray px-1.5 py-0.5 text-xs">0</span></button>
-          <button data-tab="agente" class="tab whitespace-nowrap border-b-2 border-transparent px-3 pb-3 text-sm font-medium text-pewter">Agente IA <span class="mono ml-1 rounded-full bg-orchid-glaze/10 px-1.5 py-0.5 text-[10px] text-carbon">MCP</span></button>
         </div>
         <div id="ticketList" class="divide-y divide-mist-gray"></div>
-        <section id="chatPanel" class="hidden border-t border-mist-gray px-5 py-5 sm:px-7">
-          <div class="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <p class="text-xs font-semibold uppercase tracking-wider text-pewter">Agente IA · tool-use sobre o MCP</p>
-              <p id="chatModo" class="mono mt-1 text-[11px] text-silver-wash">Detectando modo…</p>
-            </div>
-            <span id="chatStatus" class="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[10px] font-semibold text-emerald-700">PRONTO</span>
-          </div>
-          <div id="chatMensagens" class="mt-4 max-h-[360px] space-y-3 overflow-y-auto rounded-xl border border-mist-gray bg-paper-white p-4"></div>
-          <div id="chatTrilha" class="mt-3"></div>
-          <form id="chatForm" class="mt-4 flex flex-col gap-2 sm:flex-row">
-            <input id="chatInput" type="text" autocomplete="off" maxlength="2000" placeholder="Ex.: Analise o TK-1005 e escale se for bug real" class="min-w-0 flex-1 rounded-full border border-slate-edge bg-white px-4 py-2.5 text-sm text-carbon outline-none placeholder:text-silver-wash focus:border-cobalt-signal" />
-            <button id="chatEnviar" type="submit" class="h-10 shrink-0 rounded-full bg-cobalt-signal px-5 text-sm font-semibold text-white transition hover:opacity-90">Enviar</button>
-          </form>
-          <div class="mt-3 flex flex-wrap gap-2">
-            <button class="chat-sugestao rounded-full border border-slate-edge bg-white px-3 py-1.5 text-[11px] font-medium text-graphite hover:border-cobalt-signal hover:text-cobalt-signal" data-sugestao="Analise o TK-1005">Analisar TK-1005</button>
-            <button class="chat-sugestao rounded-full border border-slate-edge bg-white px-3 py-1.5 text-[11px] font-medium text-graphite hover:border-cobalt-signal hover:text-cobalt-signal" data-sugestao="Trie o TK-1005 e gere o pacote de engenharia">Triar com pacote N2</button>
-            <button class="chat-sugestao rounded-full border border-slate-edge bg-white px-3 py-1.5 text-[11px] font-medium text-graphite hover:border-cobalt-signal hover:text-cobalt-signal" data-sugestao="Me mostre as estatísticas da fila">Ver estatísticas</button>
-          </div>
-        </section>
         <details id="auditPanel" class="border-t border-mist-gray px-5 py-4 sm:px-7" open>
           <summary class="cursor-pointer text-xs font-semibold uppercase tracking-wider text-pewter">Atividade Recente do Agente MCP <span id="auditCount" class="ml-1 rounded-full bg-mist-gray px-1.5 py-0.5 text-[10px]">0</span></summary>
           <p class="mt-1 text-[11px] text-silver-wash">Ações gravadas no SQLite pelo MCP (chat ou painel), do mais recente para o mais antigo.</p>
@@ -89,20 +68,45 @@
     </div>
   </main>
 
+  <section id="chatPanel" class="fixed bottom-24 right-4 z-40 hidden w-[calc(100vw-2rem)] max-w-[440px] overflow-hidden rounded-2xl border border-slate-edge bg-white shadow-subtle-4" role="dialog" aria-label="Chat do Agente IA">
+    <div class="flex items-start justify-between gap-3 border-b border-mist-gray px-4 py-3">
+      <div class="min-w-0">
+        <p class="text-xs font-semibold uppercase tracking-wider text-pewter">Agente IA · tool-use sobre o MCP</p>
+        <p id="chatModo" class="mono mt-1 truncate text-[11px] text-silver-wash">Detectando modo…</p>
+      </div>
+      <div class="flex shrink-0 items-center gap-2">
+        <span id="chatStatus" class="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[10px] font-semibold text-emerald-700">PRONTO</span>
+        <button id="closeChat" class="grid h-9 w-9 place-items-center rounded-full border border-slate-edge text-graphite hover:bg-mist-gray" aria-label="Fechar chat"><svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      </div>
+    </div>
+    <div class="px-4 py-4">
+      <div id="chatMensagens" class="max-h-[300px] space-y-3 overflow-y-auto rounded-xl border border-mist-gray bg-paper-white p-4"></div>
+      <div id="chatTrilha" class="mt-3"></div>
+      <form id="chatForm" class="mt-4 flex flex-col gap-2 sm:flex-row">
+        <input id="chatInput" type="text" autocomplete="off" maxlength="2000" placeholder="Ex.: Analise o TK-1005 e escale se for bug real" class="min-w-0 flex-1 rounded-full border border-slate-edge bg-white px-4 py-2.5 text-sm text-carbon outline-none placeholder:text-silver-wash focus:border-cobalt-signal" />
+        <button id="chatEnviar" type="submit" class="h-10 shrink-0 rounded-full bg-cobalt-signal px-5 text-sm font-semibold text-white transition hover:opacity-90">Enviar</button>
+      </form>
+      <div class="mt-3 flex flex-wrap gap-2">
+        <button class="chat-sugestao rounded-full border border-slate-edge bg-white px-3 py-1.5 text-[11px] font-medium text-graphite hover:border-cobalt-signal hover:text-cobalt-signal" data-sugestao="Analise o TK-1005">Analisar TK-1005</button>
+        <button class="chat-sugestao rounded-full border border-slate-edge bg-white px-3 py-1.5 text-[11px] font-medium text-graphite hover:border-cobalt-signal hover:text-cobalt-signal" data-sugestao="Trie o TK-1005 e gere o pacote de engenharia">Triar com pacote N2</button>
+        <button class="chat-sugestao rounded-full border border-slate-edge bg-white px-3 py-1.5 text-[11px] font-medium text-graphite hover:border-cobalt-signal hover:text-cobalt-signal" data-sugestao="Me mostre as estatísticas da fila">Ver estatísticas</button>
+      </div>
+    </div>
+  </section>
+  <button id="chatLauncher" class="fixed bottom-6 right-4 z-40 inline-flex items-center gap-2 rounded-full bg-cobalt-signal px-4 py-3 text-sm font-semibold text-white shadow-subtle-4 transition hover:opacity-90" aria-label="Abrir chat do Agente IA"><svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 14a3 3 0 0 1-3 3H9l-5 3v-3a3 3 0 0 1-1-2V7a3 3 0 0 1 3-3h11a3 3 0 0 1 3 3z"/></svg><span>Agente IA</span></button>
   <nav class="fixed bottom-6 left-1/2 z-30 flex -translate-x-1/2 items-center gap-1 rounded-full border border-slate-edge bg-white/90 px-2 py-2 backdrop-blur shadow-subtle-4" aria-label="Visões rápidas">
-    <button data-tab="all" class="float-tab rounded-full bg-obsidian px-4 py-2 text-xs font-semibold text-white">Visão Geral</button>
-    <button data-tab="pending" class="float-tab rounded-full px-3 py-2 text-xs font-semibold text-graphite hover:bg-mist-gray">Pendentes</button>
-    <button data-tab="n1" class="float-tab rounded-full px-3 py-2 text-xs font-semibold text-graphite hover:bg-mist-gray">Resolvidos N1</button>
-    <button data-tab="n2" class="float-tab rounded-full px-3 py-2 text-xs font-semibold text-graphite hover:bg-mist-gray">Críticos Engenharia</button>
-    <button data-tab="logs" class="float-tab rounded-full px-3 py-2 text-xs font-semibold text-graphite hover:bg-mist-gray">Logs HTTP</button>
-    <button data-tab="agente" class="float-tab rounded-full px-3 py-2 text-xs font-semibold text-graphite hover:bg-mist-gray">Agente IA</button>
+    <button data-tab="all" class="float-tab inline-flex items-center gap-1.5 rounded-full py-2 text-xs font-semibold bg-obsidian px-3 text-white"><svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg><span>Visão Geral</span></button>
+    <button data-tab="pending" class="float-tab inline-flex items-center gap-1.5 rounded-full py-2 text-xs font-semibold px-3 text-graphite hover:bg-mist-gray"><svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span>Pendentes</span></button>
+    <button data-tab="n1" class="float-tab inline-flex items-center gap-1.5 rounded-full py-2 text-xs font-semibold px-3 text-graphite hover:bg-mist-gray"><svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 5-6"/></svg><span>Resolvidos N1</span></button>
+    <button data-tab="n2" class="float-tab inline-flex items-center gap-1.5 rounded-full py-2 text-xs font-semibold px-3 text-graphite hover:bg-mist-gray"><svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4l9 16H3l9-16z"/><path d="M12 10v4M12 17h.01"/></svg><span>Críticos Engenharia</span></button>
+    <button data-tab="logs" class="float-tab inline-flex items-center gap-1.5 rounded-full py-2 text-xs font-semibold px-3 text-graphite hover:bg-mist-gray"><svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg><span>Logs HTTP</span></button>
   </nav>
 
   <div id="backdrop" class="backdrop fixed inset-0 z-40 bg-obsidian/25 backdrop-blur-sm"></div>
   <aside id="drawer" class="drawer fixed right-0 top-0 z-50 h-full w-full max-w-[560px] overflow-y-auto border-l border-slate-edge bg-white p-6 shadow-2xl" aria-modal="true" role="dialog" aria-labelledby="drawerId">
     <div class="flex items-start justify-between gap-4">
       <div class="min-w-0"><p class="mono text-xs text-silver-wash">CHAMADO</p><h2 id="drawerId" class="mt-1 truncate text-xl font-semibold text-carbon"></h2></div>
-      <button id="closeDrawer" class="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-slate-edge text-graphite hover:bg-mist-gray" aria-label="Fechar">×</button>
+      <button id="closeDrawer" class="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-slate-edge text-graphite hover:bg-mist-gray" aria-label="Fechar"><svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
     </div>
     <div id="drawerContent" class="mt-6 space-y-6"></div>
   </aside>
@@ -130,7 +134,7 @@
       bancoOk: false, sseOk: false, pendentes: 0, mudados: new Set(), ultimaAssinatura: null,
       mcp: { ok: false, ocupado: false, ferramentas: [], tempo_ms: null },
       trilha: [], logs: [], logsOk: false, pacote: null,
-      chat: { mensagens: [], trilha: [], ocupado: false, modo: 'demo', modelo: '', respostaSse: null },
+      chat: { mensagens: [], trilha: [], ocupado: false, aberto: false, modo: 'demo', modelo: '', respostaSse: null },
     };
 
     const $ = (id) => document.getElementById(id);
@@ -229,7 +233,7 @@
       return '<section><p class="text-xs font-semibold uppercase tracking-wider text-silver-wash">Trilha do agente MCP</p>'
         + '<div class="mt-2 space-y-1 rounded-xl border border-mist-gray bg-paper-white p-3">'
         + state.trilha.map(e => '<div class="flex flex-wrap items-center justify-between gap-2">'
-          + '<span class="mono text-[11px] text-cobalt-signal">▸ ' + esc(e.ferramenta) + '(' + esc(e.argumentos) + ')</span>'
+          + '<span class="mono text-[11px] text-cobalt-signal"><span class="mr-1.5 inline-block h-1.5 w-1.5 rounded-full bg-current align-middle"></span> ' + esc(e.ferramenta) + '(' + esc(e.argumentos) + ')</span>'
           + '<span class="mono text-[10px] text-silver-wash">' + esc(e.tempo_ms) + ' ms · ' + esc(e.quando) + '</span>'
           + '</div>').join('')
         + '</div></section>';
@@ -271,7 +275,7 @@
         ? '<p class="text-xs font-semibold uppercase tracking-wider text-silver-wash">Tools chamadas neste turno</p>'
           + '<div class="mt-2 space-y-1 rounded-xl border border-mist-gray bg-paper-white p-3">'
           + state.chat.trilha.map(t => '<div class="flex flex-wrap items-center justify-between gap-2">'
-            + '<span class="mono text-[11px] text-cobalt-signal">▸ ' + esc(t.ferramenta) + '(' + esc(t.argumentos) + ')</span>'
+            + '<span class="mono text-[11px] text-cobalt-signal"><span class="mr-1.5 inline-block h-1.5 w-1.5 rounded-full bg-current align-middle"></span> ' + esc(t.ferramenta) + '(' + esc(t.argumentos) + ')</span>'
             + '<span class="mono text-[10px] text-silver-wash">'
             + (t.tempo_ms != null ? esc(t.tempo_ms) + ' ms' : 'executando…') + '</span></div>').join('')
           + '</div>'
@@ -283,6 +287,22 @@
         ? 'rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[10px] font-semibold text-amber-800'
         : 'rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[10px] font-semibold text-emerald-700';
       $('chatEnviar').disabled = state.chat.ocupado;
+    }
+
+    function abrirChat() {
+      state.chat.aberto = true;
+      $('chatPanel').classList.remove('hidden');
+      $('chatLauncher').classList.add('hidden');
+      $('toasts').classList.add('chat-aberto');
+      renderChat();
+      $('chatInput').focus();
+    }
+
+    function fecharChat() {
+      state.chat.aberto = false;
+      $('chatPanel').classList.add('hidden');
+      $('chatLauncher').classList.remove('hidden');
+      $('toasts').classList.remove('chat-aberto');
     }
 
     async function enviarChat(texto) {
@@ -455,7 +475,7 @@
           return '<div class="flex flex-wrap items-center gap-2 rounded-lg border border-mist-gray bg-paper-white px-3 py-2">'
             + '<span class="mono text-[10px] text-silver-wash">[' + esc(hora) + ']</span>'
             + '<span class="mono text-[11px] font-semibold text-cobalt-signal">' + esc(t.protocolo) + '</span>'
-            + '<span class="rounded-full border px-2 py-0.5 text-[10px] font-semibold ' + cls + '">→ ' + acao + '</span>'
+            + '<span class="rounded-full border px-2 py-0.5 text-[10px] font-semibold ' + cls + '">' + acao + '</span>'
             + '<span class="mono text-[10px] text-graphite">(' + esc(t.categoria || 'sem categoria') + ')</span>'
             + '<span class="ml-auto text-[9px] font-semibold uppercase tracking-wide text-silver-wash">MCP</span>'
             + '</div>';
@@ -480,8 +500,8 @@
           : '<span class="rounded-full border border-amber-200 bg-amber-50 px-2 py-1 text-[10px] font-semibold text-amber-800">Aguardando análise</span>';
 
       const tag = t.categoria
-        ? '<span class="mono rounded-md border border-orchid-glaze/70 bg-orchid-glaze/10 px-2 py-1 text-[11px] font-medium text-carbon">▸ ' + esc(t.categoria.replace(/_/g, ' ')) + '</span>'
-        : '<span class="mono rounded-md border border-slate-edge bg-mist-gray/60 px-2 py-1 text-[11px] font-medium text-graphite">▸ ' + esc(t.canal || 'sem categoria') + '</span>';
+        ? '<span class="mono rounded-md border border-orchid-glaze/70 bg-orchid-glaze/10 px-2 py-1 text-[11px] font-medium text-carbon"><span class="mr-1.5 inline-block h-1.5 w-1.5 rounded-full bg-current align-middle"></span> ' + esc(t.categoria.replace(/_/g, ' ')) + '</span>'
+        : '<span class="mono rounded-md border border-slate-edge bg-mist-gray/60 px-2 py-1 text-[11px] font-medium text-graphite"><span class="mr-1.5 inline-block h-1.5 w-1.5 rounded-full bg-current align-middle"></span> ' + esc(t.canal || 'sem categoria') + '</span>';
 
       let blocoDiag = '';
       if (t.diagnostico) {
@@ -504,10 +524,10 @@
         + '<button class="title-link text-left text-sm font-semibold text-cobalt-signal hover:underline">' + esc(t.titulo) + '</button>'
         + '</div>'
         + '<p class="mt-1 text-xs text-pewter">' + esc(t.cliente || 'Cliente não informado')
-        + '<span class="mx-1 text-slate-edge">•</span>' + esc(t.empresa || '—')
-        + '<span class="mx-1 text-slate-edge">•</span>' + esc(t.plano || '—') + '</p>'
+        + '<span class="mx-1 text-slate-edge">/</span>' + esc(t.empresa || '—')
+        + '<span class="mx-1 text-slate-edge">/</span>' + esc(t.plano || '—') + '</p>'
         + '<div class="mt-3 flex flex-wrap items-center gap-2">' + tag + fila + selo
-        + '<span class="rounded-full border px-2 py-1 text-[10px] font-semibold ' + st.cls + '">● ' + st.label + '</span>'
+        + '<span class="rounded-full border px-2 py-1 text-[10px] font-semibold ' + st.cls + '"><span class="mr-1.5 inline-block h-1.5 w-1.5 rounded-full bg-current align-middle"></span> ' + st.label + '</span>'
         + '<span class="rounded-full border px-2 py-1 text-[10px] font-semibold ' + urg.cls + '">' + urg.label + '</span>'
         + '</div>' + blocoDiag
         + '</div></div></article>';
@@ -516,13 +536,6 @@
     function render() {
       renderKpis();
       renderAuditoria();
-      const ehChat = state.activeTab === 'agente';
-      $('ticketList').classList.toggle('hidden', ehChat);
-      $('chatPanel').classList.toggle('hidden', !ehChat);
-      if (ehChat) {
-        renderChat();
-        return;
-      }
       if (state.activeTab === 'logs') {
         renderLogs();
         return;
@@ -556,7 +569,7 @@
         await navigator.clipboard.writeText(texto);
         if (botao) {
           const original = botao.textContent;
-          botao.textContent = 'Copiado ✓';
+          botao.textContent = 'Copiado';
           setTimeout(() => { botao.textContent = original || rotulo; }, 1400);
         }
         toast('Resposta copiada para a área de transferência.', 'ok');
@@ -725,7 +738,7 @@
       const alertas = analise?.alertas_cadastro || [];
 
       const alertasHtml = alertas.length
-        ? '<ul class="mt-2 space-y-1">' + alertas.map(a => '<li class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">⚠ ' + esc(a) + '</li>').join('') + '</ul>'
+        ? '<ul class="mt-2 space-y-1">' + alertas.map(a => '<li class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900"><span class="font-semibold">Alerta:</span> ' + esc(a) + '</li>').join('') + '</ul>'
         : '<p class="mt-2 text-xs text-silver-wash">Nenhum alerta cadastral.</p>';
 
       const statusChips = Object.entries(ev.por_status_code || {})
@@ -733,7 +746,7 @@
       const endpoints = Object.entries(ev.por_endpoint || {})
         .map(([ep, total]) => '<span class="mono rounded-md border border-slate-edge bg-mist-gray/50 px-2 py-1 text-[11px] text-graphite">' + esc(ep) + ' × ' + total + '</span>').join('') || '<span class="text-xs text-silver-wash">—</span>';
       const mensagens = (ev.mensagens_distintas || [])
-        .map(m => '<li class="mono text-[11px] leading-5 text-graphite">• ' + esc(m) + '</li>').join('') || '<li class="text-xs text-silver-wash">Sem mensagens de erro.</li>';
+        .map(m => '<li class="mono text-[11px] leading-5 text-graphite"><span class="mr-1.5 inline-block h-1.5 w-1.5 rounded-full bg-current align-middle"></span> ' + esc(m) + '</li>').join('') || '<li class="text-xs text-silver-wash">Sem mensagens de erro.</li>';
       const traces = (ev.stack_traces || []).map((tr, i) => '<details class="mt-2 rounded-lg border border-red-200 bg-red-50/60"><summary class="cursor-pointer px-3 py-2 text-xs font-semibold text-red-700">Stack trace #' + (i + 1) + '</summary><pre class="mono overflow-x-auto px-3 pb-3 text-[11px] leading-5 text-carbon">' + esc(tr) + '</pre></details>').join('');
 
       const lat = ev.latencia_ms || {};
@@ -788,7 +801,7 @@
         + '<section><p class="text-xs font-semibold uppercase tracking-wider text-silver-wash">Reclamação</p>'
         + '<p class="mt-2 rounded-xl bg-paper-white p-4 text-sm leading-6 text-graphite">' + esc(t.descricao || 'Sem descrição disponível.') + '</p>'
         + '<div class="mt-2 flex flex-wrap gap-2 text-[10px] font-semibold">'
-        + '<span class="rounded-full border px-2 py-1 ' + st.cls + '">● ' + st.label + '</span>'
+        + '<span class="rounded-full border px-2 py-1 ' + st.cls + '"><span class="mr-1.5 inline-block h-1.5 w-1.5 rounded-full bg-current align-middle"></span> ' + st.label + '</span>'
         + '<span class="rounded-full border px-2 py-1 ' + urg.cls + '">' + urg.label + '</span>'
         + '<span class="rounded-full border border-slate-edge bg-mist-gray/60 px-2 py-1 text-graphite">canal: ' + esc(t.canal || '—') + '</span>'
         + '<span class="rounded-full border border-slate-edge bg-mist-gray/60 px-2 py-1 text-graphite">aberto em ' + esc(fmtData(t.criado_em)) + '</span>'
@@ -946,13 +959,19 @@
       e.preventDefault();
       enviarChat($('chatInput').value);
     });
+    $('chatLauncher').onclick = abrirChat;
+    $('closeChat').onclick = fecharChat;
     document.querySelectorAll('.chat-sugestao').forEach(btn => btn.addEventListener('click', () => {
-      setTab('agente');
+      abrirChat();
       enviarChat(btn.dataset.sugestao);
     }));
     $('closeDrawer').onclick = fecharDrawer;
     $('backdrop').onclick = fecharDrawer;
-    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') fecharDrawer(); });
+    document.addEventListener('keydown', (e) => {
+      if (e.key !== 'Escape') return;
+      fecharDrawer();
+      if (state.chat.aberto) fecharChat();
+    });
 
     $('simulateBtn').onclick = () => {
       const proximo = state.tickets.find(t => t.status === 'aberto' || t.status === 'em_triagem');
@@ -966,7 +985,7 @@
       botao.textContent = 'Injetando chamado…';
       const res = await api('/api/injetar-chamado', { method: 'POST' });
       botao.disabled = false;
-      botao.textContent = '⚡ Injetar Chamado Ao Vivo';
+      botao.textContent = 'Injetar Chamado Ao Vivo';
       if (!res.ok) { toast(res.erro || 'Falha ao injetar chamado.', 'erro'); return; }
       if (!state.sseOk) toast('Novo chamado ' + res.protocolo + ': ' + (res.rotulo || 'novo incidente'), 'ok');
       state.activeTab = 'all';
