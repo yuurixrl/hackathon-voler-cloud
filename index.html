@@ -57,8 +57,29 @@
           <button data-tab="n1" class="tab whitespace-nowrap border-b-2 border-transparent px-3 pb-3 text-sm font-medium text-pewter">Devolvidos N1 (Falso Alarme) <span id="countN1" class="ml-1 rounded-full bg-mist-gray px-1.5 py-0.5 text-xs">0</span></button>
           <button data-tab="n2" class="tab whitespace-nowrap border-b-2 border-transparent px-3 pb-3 text-sm font-medium text-pewter">Fila Engenharia (N2) <span id="countN2" class="ml-1 rounded-full bg-mist-gray px-1.5 py-0.5 text-xs">0</span></button>
           <button data-tab="logs" class="tab whitespace-nowrap border-b-2 border-transparent px-3 pb-3 text-sm font-medium text-pewter">Logs HTTP (Telemetria) <span id="countLogs" class="ml-1 rounded-full bg-mist-gray px-1.5 py-0.5 text-xs">0</span></button>
+          <button data-tab="agente" class="tab whitespace-nowrap border-b-2 border-transparent px-3 pb-3 text-sm font-medium text-pewter">Agente IA <span class="mono ml-1 rounded-full bg-orchid-glaze/10 px-1.5 py-0.5 text-[10px] text-carbon">MCP</span></button>
         </div>
         <div id="ticketList" class="divide-y divide-mist-gray"></div>
+        <section id="chatPanel" class="hidden border-t border-mist-gray px-5 py-5 sm:px-7">
+          <div class="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p class="text-xs font-semibold uppercase tracking-wider text-pewter">Agente IA · tool-use sobre o MCP</p>
+              <p id="chatModo" class="mono mt-1 text-[11px] text-silver-wash">Detectando modo…</p>
+            </div>
+            <span id="chatStatus" class="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[10px] font-semibold text-emerald-700">PRONTO</span>
+          </div>
+          <div id="chatMensagens" class="mt-4 max-h-[360px] space-y-3 overflow-y-auto rounded-xl border border-mist-gray bg-paper-white p-4"></div>
+          <div id="chatTrilha" class="mt-3"></div>
+          <form id="chatForm" class="mt-4 flex flex-col gap-2 sm:flex-row">
+            <input id="chatInput" type="text" autocomplete="off" maxlength="2000" placeholder="Ex.: Analise o TK-1005 e escale se for bug real" class="min-w-0 flex-1 rounded-full border border-slate-edge bg-white px-4 py-2.5 text-sm text-carbon outline-none placeholder:text-silver-wash focus:border-cobalt-signal" />
+            <button id="chatEnviar" type="submit" class="h-10 shrink-0 rounded-full bg-cobalt-signal px-5 text-sm font-semibold text-white transition hover:opacity-90">Enviar</button>
+          </form>
+          <div class="mt-3 flex flex-wrap gap-2">
+            <button class="chat-sugestao rounded-full border border-slate-edge bg-white px-3 py-1.5 text-[11px] font-medium text-graphite hover:border-cobalt-signal hover:text-cobalt-signal" data-sugestao="Analise o TK-1005">Analisar TK-1005</button>
+            <button class="chat-sugestao rounded-full border border-slate-edge bg-white px-3 py-1.5 text-[11px] font-medium text-graphite hover:border-cobalt-signal hover:text-cobalt-signal" data-sugestao="Trie o TK-1005 e gere o pacote de engenharia">Triar com pacote N2</button>
+            <button class="chat-sugestao rounded-full border border-slate-edge bg-white px-3 py-1.5 text-[11px] font-medium text-graphite hover:border-cobalt-signal hover:text-cobalt-signal" data-sugestao="Me mostre as estatísticas da fila">Ver estatísticas</button>
+          </div>
+        </section>
         <details id="auditPanel" class="border-t border-mist-gray px-5 py-4 sm:px-7" open>
           <summary class="cursor-pointer text-xs font-semibold uppercase tracking-wider text-pewter">Atividade Recente do Agente MCP <span id="auditCount" class="ml-1 rounded-full bg-mist-gray px-1.5 py-0.5 text-[10px]">0</span></summary>
           <p class="mt-1 text-[11px] text-silver-wash">Ações gravadas no SQLite pelo MCP (chat ou painel), do mais recente para o mais antigo.</p>
@@ -74,6 +95,7 @@
     <button data-tab="n1" class="float-tab rounded-full px-3 py-2 text-xs font-semibold text-graphite hover:bg-mist-gray">Resolvidos N1</button>
     <button data-tab="n2" class="float-tab rounded-full px-3 py-2 text-xs font-semibold text-graphite hover:bg-mist-gray">Críticos Engenharia</button>
     <button data-tab="logs" class="float-tab rounded-full px-3 py-2 text-xs font-semibold text-graphite hover:bg-mist-gray">Logs HTTP</button>
+    <button data-tab="agente" class="float-tab rounded-full px-3 py-2 text-xs font-semibold text-graphite hover:bg-mist-gray">Agente IA</button>
   </nav>
 
   <div id="backdrop" class="backdrop fixed inset-0 z-40 bg-obsidian/25 backdrop-blur-sm"></div>
@@ -108,6 +130,7 @@
       bancoOk: false, sseOk: false, pendentes: 0, mudados: new Set(), ultimaAssinatura: null,
       mcp: { ok: false, ocupado: false, ferramentas: [], tempo_ms: null },
       trilha: [], logs: [], logsOk: false, pacote: null,
+      chat: { mensagens: [], trilha: [], ocupado: false, modo: 'demo', modelo: '', respostaSse: null },
     };
 
     const $ = (id) => document.getElementById(id);
@@ -184,6 +207,9 @@
       state.mcp.ok = !!(data.ok && (data.ferramentas || []).length);
       state.mcp.ferramentas = data.ferramentas || [];
       state.mcp.tempo_ms = data.tempo_ms;
+      state.chat.modo = data.modo_agente || 'demo';
+      state.chat.modelo = data.modelo || '';
+      atualizarModoChat();
       atualizarBadgeMcp();
       if (!state.mcp.ok) toast('Servidor MCP não respondeu: ' + (data.erro || 'erro desconhecido'), 'aviso');
     }
@@ -207,6 +233,86 @@
           + '<span class="mono text-[10px] text-silver-wash">' + esc(e.tempo_ms) + ' ms · ' + esc(e.quando) + '</span>'
           + '</div>').join('')
         + '</div></section>';
+    }
+
+    function atualizarModoChat() {
+      const el = $('chatModo');
+      if (!el) return;
+      const modo = state.chat.modo === 'anthropic'
+        ? 'Anthropic (LLM real)' : 'Demo offline (roteador determinístico)';
+      el.textContent = modo + (state.chat.modelo ? ' · ' + state.chat.modelo : '')
+        + ' · tools via MCP';
+    }
+
+    function addChatMensagem(papel, texto, modo, erro) {
+      state.chat.mensagens.push({ papel, texto, modo, erro: !!erro });
+      state.chat.mensagens = state.chat.mensagens.slice(-30);
+      renderChat();
+    }
+
+    function renderChat() {
+      const caixa = $('chatMensagens');
+      if (!caixa) return;
+      caixa.innerHTML = state.chat.mensagens.length
+        ? state.chat.mensagens.map(m => {
+          const humano = m.papel === 'usuario';
+          const estilo = humano
+            ? 'border-cobalt-signal/30 bg-cobalt-signal/10 text-carbon'
+            : m.erro ? 'border-red-200 bg-red-50 text-red-800' : 'border-mist-gray bg-white text-graphite';
+          const rotulo = humano ? 'VOCÊ' : m.erro ? 'ERRO' : 'AGENTE IA · ' + String(m.modo || 'demo').toUpperCase();
+          return '<div class="rounded-xl border px-3 py-2.5 ' + estilo + '">'
+            + '<p class="mono text-[10px] font-semibold uppercase tracking-wide text-silver-wash">' + esc(rotulo) + '</p>'
+            + '<p class="mt-1 whitespace-pre-wrap text-xs leading-5">' + esc(m.texto) + '</p></div>';
+        }).join('')
+        : '<p class="text-xs text-silver-wash">Pergunte sobre um chamado ou peça uma ação. Todo dado vem das tools do MCP — nada é inventado pelo front.</p>';
+      caixa.scrollTop = caixa.scrollHeight;
+
+      $('chatTrilha').innerHTML = state.chat.trilha.length
+        ? '<p class="text-xs font-semibold uppercase tracking-wider text-silver-wash">Tools chamadas neste turno</p>'
+          + '<div class="mt-2 space-y-1 rounded-xl border border-mist-gray bg-paper-white p-3">'
+          + state.chat.trilha.map(t => '<div class="flex flex-wrap items-center justify-between gap-2">'
+            + '<span class="mono text-[11px] text-cobalt-signal">▸ ' + esc(t.ferramenta) + '(' + esc(t.argumentos) + ')</span>'
+            + '<span class="mono text-[10px] text-silver-wash">'
+            + (t.tempo_ms != null ? esc(t.tempo_ms) + ' ms' : 'executando…') + '</span></div>').join('')
+          + '</div>'
+        : '';
+
+      const status = $('chatStatus');
+      status.textContent = state.chat.ocupado ? 'AGENTE TRABALHANDO…' : 'PRONTO';
+      status.className = state.chat.ocupado
+        ? 'rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[10px] font-semibold text-amber-800'
+        : 'rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[10px] font-semibold text-emerald-700';
+      $('chatEnviar').disabled = state.chat.ocupado;
+    }
+
+    async function enviarChat(texto) {
+      const mensagem = String(texto || '').trim();
+      if (!mensagem || state.chat.ocupado) return;
+      $('chatInput').value = '';
+      addChatMensagem('usuario', mensagem);
+      state.chat.ocupado = true;
+      state.chat.trilha = [];
+      state.chat.respostaSse = null;
+      renderChat();
+
+      const res = await api('/api/agente/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mensagem, ticket_id: state.selectedId || null }),
+      });
+      if (!res.ok) {
+        addChatMensagem('agente', res.erro || 'Falha ao chamar o agente.', res.modo, true);
+        state.chat.ocupado = false;
+        renderChat();
+        return;
+      }
+      // Com SSE conectado, a resposta já chegou pelo evento agente_resposta.
+      if (!state.chat.respostaSse) {
+        addChatMensagem('agente', res.resposta, res.modo);
+      }
+      state.chat.ocupado = false;
+      renderChat();
+      await atualizar('agente');
     }
 
     function assinatura(lista) {
@@ -410,6 +516,13 @@
     function render() {
       renderKpis();
       renderAuditoria();
+      const ehChat = state.activeTab === 'agente';
+      $('ticketList').classList.toggle('hidden', ehChat);
+      $('chatPanel').classList.toggle('hidden', !ehChat);
+      if (ehChat) {
+        renderChat();
+        return;
+      }
       if (state.activeTab === 'logs') {
         renderLogs();
         return;
@@ -790,12 +903,53 @@
         try { data = JSON.parse(ev.data); } catch { return; }
         if (data.tipo === 'conectado') { setSse(true); return; }
         if (data.tipo === 'novo_chamado') toast('Novo chamado ' + data.protocolo + ': ' + (data.rotulo || 'novo incidente'), 'aviso');
+        if (data.tipo === 'agente_inicio') {
+          state.chat.ocupado = true;
+          state.chat.trilha = [];
+          state.chat.respostaSse = null;
+          mcpOcupado(true);
+          renderChat();
+          return;
+        }
+        if (data.tipo === 'agente_tool') {
+          registrarTrilha(data.ferramenta, JSON.stringify(data.argumentos), data.tempo_ms);
+          state.chat.trilha.push({
+            ferramenta: data.ferramenta,
+            argumentos: Object.entries(data.argumentos || {}).map(([k, v]) => k + '=' + v).join(', '),
+            tempo_ms: data.tempo_ms,
+          });
+          renderChat();
+          return;
+        }
+        if (data.tipo === 'agente_resposta') {
+          if (state.chat.respostaSse) return;
+          state.chat.respostaSse = data.id;
+          state.chat.ocupado = false;
+          mcpOcupado(false);
+          addChatMensagem('agente', data.texto, data.modo);
+          atualizar('agente');
+          return;
+        }
+        if (data.tipo === 'agente_erro') {
+          state.chat.ocupado = false;
+          mcpOcupado(false);
+          addChatMensagem('agente', data.erro || 'Falha no agente.', null, true);
+          return;
+        }
         atualizar('sse');
         if (data.tipo === 'reset') fecharDrawer();
       };
     }
 
     document.querySelectorAll('[data-tab]').forEach(el => el.addEventListener('click', () => setTab(el.dataset.tab)));
+    $('chatForm').addEventListener('submit', (e) => {
+      e.preventDefault();
+      enviarChat($('chatInput').value);
+    });
+    document.querySelectorAll('.chat-sugestao').forEach(btn => btn.addEventListener('click', () => {
+      setTab('agente');
+      enviarChat(btn.dataset.sugestao);
+    }));
     $('closeDrawer').onclick = fecharDrawer;
     $('backdrop').onclick = fecharDrawer;
     document.addEventListener('keydown', (e) => { if (e.key === 'Escape') fecharDrawer(); });

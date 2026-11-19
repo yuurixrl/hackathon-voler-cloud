@@ -11,6 +11,7 @@ Endpoints principais:
     GET  /api/tickets/{id}/analise  -> evidências + hipótese + destino sugerido
     GET  /api/tickets/{id}/logs     -> últimos logs HTTP do cliente do ticket
     POST /api/tickets/{id}/triagem  -> grava a triagem (direto, legado)
+    POST /api/agente/chat           -> agente de IA (tool-use sobre o MCP, SSE agente_*)
     POST /api/agente/analisar       -> analise gerada pelo MCP em processo separado
     POST /api/agente/triagem        -> triagem gravada pelo MCP em processo separado
     POST /api/agente/pacote         -> card de engenharia gerado pela tool MCP
@@ -33,6 +34,7 @@ import json
 import os
 import sys
 import time
+import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
@@ -45,6 +47,7 @@ from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+import agente
 import triagem
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -243,6 +246,11 @@ def triar_ticket(ticket_id: int, dados: TriagemIn) -> JSONResponse:
     return _json(resultado)
 
 
+class AgenteChatIn(BaseModel):
+    mensagem: str
+    ticket_id: int | None = None
+
+
 class AgenteAnaliseIn(BaseModel):
     ticket_id: int
 
@@ -263,11 +271,47 @@ async def agente_status() -> JSONResponse:
                 "ok": True,
                 "servidor": "server.py (stdio, processo separado)",
                 "ferramentas": ferramentas,
+                "modo_agente": agente.modo(),
+                "modelo": agente.modelo(),
                 "tempo_ms": round((time.perf_counter() - inicio) * 1000),
             }
         )
     except Exception as exc:  # noqa: BLE001
         return _json({"ok": False, "erro": f"falha na ponte MCP: {exc}"})
+
+
+@app.post("/api/agente/chat")
+async def agente_chat(dados: AgenteChatIn) -> JSONResponse:
+    """Turno do agente de IA: uma sessão MCP por mensagem, eventos SSE no painel."""
+    mensagem = (dados.mensagem or "").strip()
+    turno = uuid.uuid4().hex[:8]
+    if not mensagem:
+        return _json({"ok": False, "erro": "mensagem vazia", "id": turno})
+    if len(mensagem) > agente.LIMITE_MENSAGEM:
+        return _json(
+            {
+                "ok": False,
+                "erro": f"mensagem muito longa (máx. {agente.LIMITE_MENSAGEM} caracteres)",
+                "id": turno,
+            }
+        )
+
+    inicio = time.perf_counter()
+    try:
+        async with _sessao_mcp() as session:
+            resultado = await asyncio.wait_for(
+                agente.conversar(mensagem, dados.ticket_id, session, bus.publish, turno),
+                timeout=90,
+            )
+    except asyncio.TimeoutError:
+        resultado = {"ok": False, "erro": "o agente demorou demais para responder", "id": turno}
+    except Exception as exc:  # noqa: BLE001
+        resultado = {"ok": False, "erro": f"falha no agente: {exc}", "id": turno}
+    if not resultado.get("ok"):
+        bus.publish({"tipo": "agente_erro", "id": turno, "erro": resultado.get("erro")})
+        return _json(resultado)
+    resultado["tempo_ms"] = round((time.perf_counter() - inicio) * 1000)
+    return _json(resultado)
 
 
 @app.post("/api/agente/analisar")

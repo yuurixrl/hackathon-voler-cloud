@@ -4,3 +4,6 @@ mcp>=1.9.0,<2
 # API web (interface)
 fastapi>=0.115
 uvicorn>=0.30
+
+# Agente de IA: o import é tardio, então o modo demo funciona sem instalar/pagar
+anthropic>=0.40

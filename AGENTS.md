@@ -7,7 +7,10 @@ Aplicação local de triagem N1 → N2 com **duas interfaces sobre a mesma camad
 - `server.py` — servidor MCP (FastMCP + stdio) usado pelo Claude Desktop;
 - `api.py` — API HTTP (FastAPI) que serve a interface web com SSE.
 
-Ambas consomem `triagem.py`, que concentra SQLite e regras de classificação. O
+Sobre a ponte MCP roda `agente.py`, o agente de IA do chat: interpreta a mensagem e
+decide quais tools chamar (roteador determinístico offline por padrão, Claude via
+`ANTHROPIC_API_KEY` quando configurada). Ambas consomem `triagem.py`, que concentra
+SQLite e regras de classificação. O
 `painel_ao_vivo.py` é apenas o lançador da porta 8080 para a apresentação split-screen. Ver
 [`CONTEXTO_HACKATHON.md`](CONTEXTO_HACKATHON.md) para a especificação,
 [`README.md`](README.md) para instalação e demo e
@@ -48,8 +51,9 @@ Porta/host da API via `OPS_DETECTIVE_PORT` (padrão `8000`) e `OPS_DETECTIVE_HOS
 | `triagem.py` | domínio: conexão SQLite, consultas, análise, triagem, telemetria global, injeção, pacote de engenharia, stats, playbook, health e reset |
 | `server.py` | adaptador MCP: 8 tools + 1 resource (`playbook://triagem`) |
 | `api.py` | adaptador HTTP: rotas `/api/*`, ponte MCP via stdio, SSE, arquivos estáticos |
+| `agente.py` | agente de IA: roteador demo offline, tool-use Anthropic, eventos `agente_*` |
 | `painel_ao_vivo.py` | lançador do painel de apresentação na porta 8080 (reusa `api.app`) |
-| `index.html` | front-end (KPIs, 5 abas, auditoria, injeção, drawer com pacote N2, SSE + polling 1s) |
+| `index.html` | front-end (KPIs, 6 abas, chat do agente, auditoria, injeção, drawer com pacote N2, SSE + polling 1s) |
 | `app.css` | entrada Tailwind v4 (`@import`, `@source`, tokens do design system) |
 | `static/app.css` | CSS compilado, servido ao navegador — **versionado** |
 | `package.json` | scripts `build:css` / `watch:css` (Tailwind v4) |
@@ -90,6 +94,16 @@ Porta/host da API via `OPS_DETECTIVE_PORT` (padrão `8000`) e `OPS_DETECTIVE_HOS
   Startup Cloud/`cliente_id=3`, urgência `crítica`, 3 logs 429. O protocolo é calculado
   pelo `MAX` dos `TK-\d+` existentes; o `id` do ticket é o `last_insert_rowid()`. A resposta
   traz `cenario`, `rotulo`, `status_code`, `destino_esperado` e vai no SSE `novo_chamado`.
+- O agente (`POST /api/agente/chat`) recebe `mensagem` e `ticket_id?` e roda sobre **uma**
+  `_sessao_mcp()` por turno — nunca uma sessão por tool, para não pagar ~2 s de startup do
+  `server.py` a cada chamada. `agente.conversar()` publica `agente_inicio`, `agente_tool`
+  (com nome/args/latência), `agente_erro` e `agente_resposta`; quando a tool `triar_ticket`
+  grava, o próprio agente publica `triagem` com o mesmo `id` do turno. O front usa esse `id`
+  para não duplicar a resposta entre SSE e a resposta HTTP.
+- `agente.modo()` devolve `anthropic` se `ANTHROPIC_API_KEY` estiver definida; senão `demo`.
+  O import de `anthropic` é **tardio** — o modo demo funciona sem o pacote instalado e sem
+  rede. Ferramentas são descobertas via `list_tools()` e convertidas para `input_schema`;
+  não duplique assinaturas de tools no agente. Teto: 6 iterações / 1024 tokens / 90 s.
 - `gerar_pacote_engenharia` exige HTTP `5xx` na janela `_janela_do_ticket()`; para 4xx
   devolve `_erro(...)` (a API traduz para 400). O `resumo_tecnico` pega a última linha
   `File "…", line N` **antes** da exceção — não o entrypoint da API.
@@ -123,7 +137,7 @@ Se mudar a massa de dados, atualize esta tabela e o roteiro no `README.md`.
 `GET /` · `GET /api/health` · `GET /api/tickets` · `GET /api/tickets/{id}` ·
 `GET /api/tickets/{id}/analise` · `GET /api/tickets/{id}/logs` ·
 `POST /api/tickets/{id}/triagem` · `GET /api/agente/status` ·
-`POST /api/agente/analisar` · `POST /api/agente/triagem` ·
+`POST /api/agente/chat` · `POST /api/agente/analisar` · `POST /api/agente/triagem` ·
 `POST /api/agente/pacote` · `GET /api/logs` · `POST /api/injetar-chamado` ·
 `GET /api/estatisticas` · `GET /api/playbook` ·
 `POST /api/reset` · `GET /api/events`.

@@ -8,19 +8,26 @@ real** — com telemetria, auditoria, injeção de incidente e entrega pronta pa
 | Metade da tela | O que roda | O que a banca vê |
 |---|---|---|
 | **Esquerda — Sistema da empresa** | `painel_ao_vivo.py` → `http://127.0.0.1:8080` | Fila real do `suporte.db`, aba de logs HTTP, auditoria e cards que piscam no instante da escrita |
-| **Direita — O Agente** | Claude Desktop com as 8 tools do `server.py` (MCP/stdio) | O modelo investigando logs, chamando `analisar_causa_raiz`, `triar_ticket` e `gerar_pacote_engenharia` |
+| **Direita — O Agente** | Claude Desktop (com chave) **ou** a aba **Agente IA** do próprio painel (offline) — ambos sobre as 8 tools do `server.py` via MCP/stdio | O modelo/roteador investigando logs e chamando `analisar_causa_raiz`, `triar_ticket` e `gerar_pacote_engenharia` em tempo real |
 
 ```text
- Claude / Codex (chat) -- tools MCP --> server.py (stdio) -- UPDATE --> suporte.db
-                                             ▲       ▲
+ Claude Desktop (direita) -- tools MCP ------------------+
+ aba Agente IA (esquerda) -- POST /api/agente/chat ------+--> server.py (stdio) -- UPDATE --> suporte.db
+                                                        ▲       ▲
  painel (8080) -- POST /api/agente/* --> api.py --+       | leitura mode=ro
-        │                                                  |
-        ├── /api/logs -------------------------------------+
-        └── SSE + polling 1s <--- suporte.db ---> card pisca, KPIs mudam, auditoria cresce
+         │                                                         |
+         ├── /api/logs --------------------------------------------+
+         └── SSE (agente_*, triagem, ...) <--- suporte.db ---> card pisca, KPIs mudam, auditoria cresce
 ```
 
-O painel **não** é um chat: ele lê o mesmo banco que o MCP escreve. E, para provar que
-a resposta não está decorada no HTML, o próprio painel também passa pelo MCP: ao abrir
+O painel **agora também é um chat**: a 6ª aba **Agente IA** interpreta a mensagem e chama
+as mesmas tools do `server.py`. Sem `ANTHROPIC_API_KEY` ela roda em **modo demo offline**
+(roteador determinístico em `agente.py`); com a chave, faz tool-use real com Claude. Nos
+dois casos o agente **nunca escreve direto no SQLite** — toda ação passa pelo MCP. O chat
+mostra o modo ativo, a trilha de tools (`agente_inicio` → `agente_tool` →
+`agente_resposta`, via SSE) e a latência de cada chamada.
+
+Mesmo fora do chat, o painel prova que a resposta não está decorada no HTML: ao abrir
 um chamado, ele mostra **“Agente MCP analisando…”**, dispara a tool
 `analisar_causa_raiz` em `server.py` (processo separado, ~2 s de subida) e só depois
 exibe o diagnóstico, a hipótese e a resposta sugerida — com a **trilha das tool calls**
@@ -82,7 +89,7 @@ Explique o desenho no quadro, junto ao diagrama acima:
   o mesmo protocolo do Claude Desktop. por isso o spinner dura ~2 s: é a prova visual
   de que a resposta está sendo gerada sob demanda, não servida de um arquivo estático.
 
-### 05:00 – 11:00 — Demo ao vivo
+### 05:00 – 12:00 — Demo ao vivo
 
 **1) Falso alarme (≈2 min).** Digite no chat da direita:
 
@@ -95,13 +102,27 @@ Explique o desenho no quadro, junto ao diagrama acima:
 - Role até **Atividade Recente do Agente MCP**: `[Hora] TK-1001 → Devolvido N1
   (credencial_expirada)` já está lá.
 
-**2) Logs HTTP ao vivo (≈1 min).** Clique na 5ª aba **Logs HTTP (Telemetria)**.
+**2) Agente IA dentro do painel (≈1 min).** Clique na 6ª aba **Agente IA**. O selo mostra
+**"Demo offline (roteador determinístico) · tools via MCP"** — sem chave paga e sem
+internet. Digite:
+
+> "Me mostre as estatísticas da fila" e depois "Analise o TK-1003"
+
+- A trilha aparece em tempo real: `estatisticas_triagem({})` e
+  `analisar_causa_raiz(ticket_id=3)`, cada uma com sua latência.
+- O agente responde em linguagem natural, sem escrever no banco (só leitura via MCP).
+- Para ver o agente **escrever** pelo chat, digite "Trie o TK-1005 e gere o pacote de
+  engenharia": o card pisca N2 e a auditoria cresce exatamente como no passo 4.
+- Reforce o contraste para a banca: é o mesmo `server.py`, a mesma tool e a mesma regra
+  em `triagem.py`; muda só quem decide (roteador offline vs. Claude com chave).
+
+**3) Logs HTTP ao vivo (≈1 min).** Clique na 5ª aba **Logs HTTP (Telemetria)**.
 
 - Mostre os 38 eventos reais do banco: empresa, `POST /v1/relatorios/atendimentos`,
   badges verdes/âmbar/vermelhos, latência e `request_id`.
 - Abra um `<details>` de stack trace e conecte com o que o agente acabou de dizer.
 
-**3) Bug real + pacote de engenharia (≈2 min).** Digite no chat:
+**4) Bug real + pacote de engenharia (≈2 min).** Digite no chat:
 
 > "Agora investigue o TK-1005 da HealthData, faça a triagem e gere o pacote para engenharia."
 
@@ -113,7 +134,7 @@ Explique o desenho no quadro, junto ao diagrama acima:
   `KeyError: 'segmento' em /app/services/report_service.py:142`, stack trace completo e
   critério de aceite. Clique em **Copiar card para o Jira**.
 
-**4) Injeção de chamado ao vivo (≈1 min).** Clique em **⚡ Injetar Chamado Ao Vivo**.
+**5) Injeção de chamado ao vivo (≈1 min).** Clique em **⚡ Injetar Chamado Ao Vivo**.
 
 - Toast: **"Novo chamado TK-1009: Rate limit do plano free (HTTP 429)"**
 - O `TK-1009` da Startup Cloud (plano free, urgência **CRÍTICA**) entra na fila com
@@ -127,7 +148,7 @@ Explique o desenho no quadro, junto ao diagrama acima:
   pacote de engenharia disponível) e assim por diante — 7 cenários distintos antes de
   repetir. O toast e a aba **Logs HTTP** mostram a diferença na hora.
 
-### 11:00 – 15:00 — Impacto de negócio e perguntas
+### 12:00 – 15:00 — Impacto de negócio e perguntas
 
 Se ainda houver tickets abertos, digite:
 
@@ -147,6 +168,9 @@ reais para o N2** — e o KPI **Economia Estimada de Dev** chega a **3h 30m**
 - Se o modelo não usar as ferramentas, cite os nomes: `analisar_causa_raiz`,
   `buscar_logs_http`, `triar_ticket`, `gerar_pacote_engenharia` e
   `estatisticas_triagem`.
+- A aba **Agente IA** funciona sem `ANTHROPIC_API_KEY` (modo demo offline). Se o
+  organizador configurar a chave, o selo muda para **Anthropic (LLM real)** e o Claude
+  escolhe as tools sozinho; a trilha SSE e as regras de negócio são as mesmas.
 - O destino correto é determinado pela regra em `triagem.py`: `4xx → N1`,
   `5xx + stack trace → N2`, sem erro → N1. O agente pode discordar, e o sistema
   avisa quando isso acontece — isso também é bom material de defesa.

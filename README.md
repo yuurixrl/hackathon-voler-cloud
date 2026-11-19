@@ -22,6 +22,7 @@ ops-detective/
 ├── triagem.py                     # camada de domínio: SQLite + regras de triagem
 ├── server.py                      # adaptador MCP (FastMCP, stdio)
 ├── api.py                         # API HTTP + SSE + arquivos estáticos
+├── agente.py                      # agente de IA: roteador demo offline / tool-use Anthropic
 ├── painel_ao_vivo.py              # lançador do painel de apresentação (porta 8080)
 ├── index.html                     # interface web
 ├── app.css                        # entrada do Tailwind v4 (tokens do design system)
@@ -68,6 +69,14 @@ $env:OPS_DETECTIVE_HOST = "127.0.0.1"
 .\.venv\Scripts\python.exe api.py
 ```
 
+O agente de IA roda em **modo demo offline** por padrão, sem chave nem internet. Para
+usar um Claude real (tool-use sobre as mesmas tools MCP):
+
+```powershell
+$env:ANTHROPIC_API_KEY = "sk-ant-..."
+$env:OPS_AGENTE_MODELO = "claude-3-5-sonnet-latest"  # opcional
+```
+
 A tela traz KPIs (bloqueios N2, falsos alarmes N1 e economia estimada), quatro visões
 da fila, um painel lateral com evidências (status codes, endpoints, mensagens, stack
 traces e logs) e o formulário para registrar a triagem. Dois selos no topo mostram o
@@ -82,8 +91,15 @@ A sugestão de resposta ao cliente também nasce dentro dessa tool. O formulári
 enviado por `POST /api/agente/triagem`, que executa `triar_ticket` no mesmo servidor
 MCP separado — a API HTTP apenas repassa o resultado e publica o evento SSE.
 
-### O que a V2 acrescentou
+### Recursos do painel
 
+- **Agente IA no painel** (6ª aba): um chat que interpreta a mensagem e chama as tools do
+  `server.py` em processo separado. Sem `ANTHROPIC_API_KEY`, roda em **modo demo offline**
+  com um roteador determinístico (`agente.py`): “Analise o TK-1005”, “Trie o TK-1005 e
+  gere o pacote”, estatísticas, fila e logs. Com a chave, um Claude escolhe as tools por
+  tool-use. Uma sessão MCP por mensagem (não uma por tool), eventos SSE
+  `agente_inicio` / `agente_tool` / `agente_resposta` / `agente_erro` e trilha visível no
+  chat. O agente nunca escreve no SQLite direto — só pelas tools.
 - **Aba `Logs HTTP (Telemetria)`** (5ª aba, também na pílula flutuante): os últimos 50
   eventos reais do `suporte.db`, ordenados por horário, com empresa/plano, método +
   endpoint, badge de status HTTP (2xx verde, 4xx âmbar, 5xx vermelho), latência,
@@ -121,7 +137,8 @@ MCP separado — a API HTTP apenas repassa o resultado e publica o evento SSE.
 | `GET` | `/api/tickets/{id}/analise` | evidências, hipótese e destino sugerido |
 | `GET` | `/api/tickets/{id}/logs` | logs HTTP (`limite`, `apenas_erros`, `incluir_stack_trace`) |
 | `POST` | `/api/tickets/{id}/triagem` | grava a triagem (JSON: `destino`, `categoria`, `diagnostico`, `acao_recomendada`, `resposta_cliente`) |
-| `GET` | `/api/agente/status` | tools expostas pelo `server.py` via stdio |
+| `GET` | `/api/agente/status` | tools expostas pelo `server.py` via stdio + modo do agente |
+| `POST` | `/api/agente/chat` | turno do agente de IA (`mensagem`, `ticket_id?`); resposta + SSE `agente_*` |
 | `POST` | `/api/agente/analisar` | análise gerada pela tool MCP `analisar_causa_raiz` |
 | `POST` | `/api/agente/triagem` | triagem gravada pela tool MCP `triar_ticket` |
 | `POST` | `/api/agente/pacote` | card de engenharia gerado pela tool MCP `gerar_pacote_engenharia` |
@@ -130,7 +147,7 @@ MCP separado — a API HTTP apenas repassa o resultado e publica o evento SSE.
 | `GET` | `/api/estatisticas` | placar por status/destino/categoria |
 | `GET` | `/api/playbook` | regras e categorias válidas |
 | `POST` | `/api/reset` | recria o banco de demonstração |
-| `GET` | `/api/events` | SSE (`triagem`, `novo_chamado`, `reset`, `conectado`) |
+| `GET` | `/api/events` | SSE (`triagem`, `novo_chamado`, `reset`, `conectado`, `agente_*`) |
 
 Erros de entrada devolvem `{"ok": false, "erro": "..."}` com HTTP 400; recurso
 inexistente retorna 404.
@@ -219,7 +236,9 @@ evidências no drawer e registre a triagem. Para a V2, complete com:
 2. triar o `TK-1001` (falso alarme) e conferir a linha nova na **Atividade Recente do
    Agente MCP**;
 3. abrir o `TK-1005`, clicar em **Gerar pacote engenharia** e copiar o card;
-4. clicar em **⚡ Injetar Chamado Ao Vivo**, ver o `TK-1009` (429 da Startup Cloud) e,
+4. abrir a aba **Agente IA** e digitar “Trie o TK-1005 e gere o pacote de engenharia” —
+   o chat mostra as tools sendo chamadas e o card gerado;
+5. clicar em **⚡ Injetar Chamado Ao Vivo**, ver o `TK-1009` (429 da Startup Cloud) e,
    num segundo clique, o `TK-1010` com outro problema (401 da Loja Verão)
    aparecer e triá-lo na hora.
 
