@@ -6,187 +6,524 @@
   <title>Ops Detective — Triagem N1 → N2</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script>
-    tailwind.config = { theme: { extend: { fontFamily: { sans:['Inter','sans-serif'], mono:['JetBrains Mono','monospace'] } } } }
-  </script>
-  <style>
-    :root { --blue:#0052ff; }
-    body { font-family:'Inter',sans-serif; background:#f8fafc; color:#0f172a; }
-    .mono { font-family:'JetBrains Mono',monospace; }
-    .soft-shadow { box-shadow:0 2px 12px rgba(15,23,42,.04); }
-    .pill-shadow { box-shadow:0 10px 30px rgba(15,23,42,.12); }
-    .pulse-dot { animation:pulse 1.8s ease-out infinite; }
-    @keyframes pulse { 0%,100%{box-shadow:0 0 0 0 rgba(16,185,129,.32)} 50%{box-shadow:0 0 0 5px rgba(16,185,129,0)} }
-    .ticket-row { transition:background .16s ease,border-color .16s ease; }
-    .ticket-row:hover { background:#fbfdff; }
-    .drawer { transform:translateX(100%); transition:transform .25s ease; }
-    .drawer.open { transform:translateX(0); }
-    .backdrop { opacity:0; pointer-events:none; transition:opacity .25s ease; }
-    .backdrop.open { opacity:1; pointer-events:auto; }
-    button:focus-visible,a:focus-visible { outline:3px solid rgba(0,82,255,.18); outline-offset:2px; }
-  </style>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/app.css">
 </head>
 <body class="min-h-screen pb-28">
   <main class="mx-auto max-w-[1200px] px-4 py-6 sm:px-6 lg:px-8">
-    <div class="rounded-2xl border border-slate-200 bg-white soft-shadow">
+    <div class="rounded-3xl border border-slate-edge bg-white shadow-subtle-3">
       <header class="px-5 pt-5 sm:px-7">
-        <div class="flex flex-col gap-4 border-b border-slate-100 pb-5 lg:flex-row lg:items-center lg:justify-between">
+        <div class="flex flex-col gap-4 border-b border-mist-gray pb-5 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <div class="mb-3 flex flex-wrap items-center gap-3 text-xs font-medium text-slate-500">
-              <nav aria-label="Breadcrumb"><span class="text-slate-700">Ops Detective</span><span class="mx-2 text-slate-300">/</span>Fila de Triagem N1 → N2</nav>
-              <span class="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700">
-                <span class="pulse-dot h-2 w-2 rounded-full bg-emerald-500"></span>MCP Live Sync
+            <div class="mb-3 flex flex-wrap items-center gap-3 text-xs font-medium text-pewter">
+              <nav aria-label="Breadcrumb"><span class="text-carbon">Ops Detective</span><span class="mx-2 text-slate-edge">/</span>Fila de Triagem N1 → N2</nav>
+              <span id="liveBadge" class="inline-flex items-center gap-2 rounded-full border border-slate-edge bg-mist-gray px-2.5 py-1 text-[11px] font-semibold text-graphite">
+                <span id="liveDot" class="h-2 w-2 rounded-full bg-amber-500"></span><span id="liveText">Conectando…</span>
               </span>
             </div>
-            <h1 class="text-[25px] font-semibold tracking-tight text-slate-950 sm:text-[30px]">Triagem &amp; Diagnóstico em Tempo Real</h1>
-            <p class="mt-1.5 text-sm text-slate-500">Monitor inteligente classificando chamados e protegendo a engenharia de falsos positivos.</p>
+            <h1 class="text-[25px] font-semibold tracking-tight text-carbon sm:text-[30px]">Triagem &amp; Diagnóstico em Tempo Real</h1>
+            <p class="mt-1.5 text-sm text-pewter">Monitor inteligente classificando chamados e protegendo a engenharia de falsos positivos.</p>
           </div>
           <div class="flex flex-col gap-2 sm:flex-row">
-            <button id="simulateBtn" class="h-10 rounded-full border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50">Simular Triagem (Preview)</button>
-            <button id="resetBtn" class="h-10 rounded-full bg-[#0052FF] px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700">Resetar Fila (Demo)</button>
+            <button id="simulateBtn" class="h-10 rounded-full border border-slate-edge bg-white px-4 text-sm font-semibold text-graphite transition hover:border-cobalt-signal hover:text-cobalt-signal">Analisar Próximo</button>
+            <button id="resetBtn" class="h-10 rounded-full bg-cobalt-signal px-4 text-sm font-semibold text-white shadow-subtle-2 transition hover:opacity-90">Resetar Fila (Demo)</button>
           </div>
         </div>
 
         <section class="grid gap-3 py-5 md:grid-cols-3" aria-label="Métricas rápidas">
-          <article class="rounded-xl border border-slate-200 bg-white px-4 py-3.5">
-            <div class="flex items-center justify-between"><p class="text-xs font-medium text-slate-500">Travando Engenharia (N2)</p><span class="h-2 w-2 rounded-full bg-rose-500"></span></div>
-            <p id="n2Kpi" class="mt-1 text-2xl font-semibold tracking-tight text-rose-600">0</p>
+          <article class="rounded-xl border border-slate-edge bg-white px-4 py-3.5">
+            <div class="flex items-center justify-between"><p class="text-xs font-medium text-pewter">Travando Engenharia (N2)</p><span class="h-2 w-2 rounded-full bg-red-500"></span></div>
+            <p id="n2Kpi" class="mt-1 text-2xl font-semibold tracking-tight text-red-600">0</p>
           </article>
-          <article class="rounded-xl border border-slate-200 bg-white px-4 py-3.5">
-            <div class="flex items-center justify-between"><p class="text-xs font-medium text-slate-500">Falsos Alarmes Barrados (N1)</p><span class="h-2 w-2 rounded-full bg-emerald-500"></span></div>
+          <article class="rounded-xl border border-slate-edge bg-white px-4 py-3.5">
+            <div class="flex items-center justify-between"><p class="text-xs font-medium text-pewter">Falsos Alarmes Barrados (N1)</p><span class="h-2 w-2 rounded-full bg-emerald-500"></span></div>
             <p id="n1Kpi" class="mt-1 text-2xl font-semibold tracking-tight text-emerald-600">0</p>
           </article>
-          <article class="rounded-xl border border-slate-200 bg-white px-4 py-3.5">
-            <div class="flex items-center justify-between"><p class="text-xs font-medium text-slate-500">Economia Estimada de Dev</p><span class="mono text-[10px] text-slate-400">N1 × 35m</span></div>
-            <p id="savingsKpi" class="mt-1 text-2xl font-semibold tracking-tight text-[#0052FF]">0h 0m</p>
+          <article class="rounded-xl border border-slate-edge bg-white px-4 py-3.5">
+            <div class="flex items-center justify-between"><p class="text-xs font-medium text-pewter">Economia Estimada de Dev</p><span class="mono text-[10px] text-silver-wash">N1 × 35m</span></div>
+            <p id="savingsKpi" class="mt-1 text-2xl font-semibold tracking-tight text-cobalt-signal">0h 0m</p>
           </article>
         </section>
       </header>
 
-      <section class="border-t border-slate-200">
+      <section class="border-t border-mist-gray">
         <div class="flex gap-1 overflow-x-auto px-5 pt-4 sm:px-7" id="tabs" role="tablist">
-          <button data-tab="all" class="tab whitespace-nowrap border-b-2 border-[#0052FF] px-3 pb-3 text-sm font-semibold text-[#0052FF]">Todos os Chamados <span id="countAll" class="ml-1 rounded-full bg-blue-50 px-1.5 py-0.5 text-xs">0</span></button>
-          <button data-tab="pending" class="tab whitespace-nowrap border-b-2 border-transparent px-3 pb-3 text-sm font-medium text-slate-500">Aguardando Triagem <span id="countPending" class="ml-1 rounded-full bg-slate-100 px-1.5 py-0.5 text-xs">0</span></button>
-          <button data-tab="n1" class="tab whitespace-nowrap border-b-2 border-transparent px-3 pb-3 text-sm font-medium text-slate-500">Devolvidos N1 (Falso Alarme) <span id="countN1" class="ml-1 rounded-full bg-slate-100 px-1.5 py-0.5 text-xs">0</span></button>
-          <button data-tab="n2" class="tab whitespace-nowrap border-b-2 border-transparent px-3 pb-3 text-sm font-medium text-slate-500">Fila Engenharia (N2) <span id="countN2" class="ml-1 rounded-full bg-slate-100 px-1.5 py-0.5 text-xs">0</span></button>
+          <button data-tab="all" class="tab whitespace-nowrap border-b-2 border-cobalt-signal px-3 pb-3 text-sm font-semibold text-cobalt-signal">Todos os Chamados <span id="countAll" class="ml-1 rounded-full bg-cobalt-signal/10 px-1.5 py-0.5 text-xs">0</span></button>
+          <button data-tab="pending" class="tab whitespace-nowrap border-b-2 border-transparent px-3 pb-3 text-sm font-medium text-pewter">Aguardando Triagem <span id="countPending" class="ml-1 rounded-full bg-mist-gray px-1.5 py-0.5 text-xs">0</span></button>
+          <button data-tab="n1" class="tab whitespace-nowrap border-b-2 border-transparent px-3 pb-3 text-sm font-medium text-pewter">Devolvidos N1 (Falso Alarme) <span id="countN1" class="ml-1 rounded-full bg-mist-gray px-1.5 py-0.5 text-xs">0</span></button>
+          <button data-tab="n2" class="tab whitespace-nowrap border-b-2 border-transparent px-3 pb-3 text-sm font-medium text-pewter">Fila Engenharia (N2) <span id="countN2" class="ml-1 rounded-full bg-mist-gray px-1.5 py-0.5 text-xs">0</span></button>
         </div>
-        <div id="ticketList" class="divide-y divide-slate-100"></div>
+        <div id="ticketList" class="divide-y divide-mist-gray"></div>
       </section>
     </div>
   </main>
 
-  <nav class="fixed bottom-6 left-1/2 z-30 flex -translate-x-1/2 items-center gap-1 rounded-full border border-slate-200 bg-white/90 px-2 py-2 backdrop-blur pill-shadow" aria-label="Visões rápidas">
-    <button data-tab="all" class="float-tab rounded-full bg-slate-950 px-4 py-2 text-xs font-semibold text-white">Visão Geral</button>
-    <button data-tab="pending" class="float-tab rounded-full px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100">Pendentes</button>
-    <button data-tab="n1" class="float-tab rounded-full px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100">Resolvidos N1</button>
-    <button data-tab="n2" class="float-tab rounded-full px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100">Críticos Engenharia</button>
+  <nav class="fixed bottom-6 left-1/2 z-30 flex -translate-x-1/2 items-center gap-1 rounded-full border border-slate-edge bg-white/90 px-2 py-2 backdrop-blur shadow-subtle-4" aria-label="Visões rápidas">
+    <button data-tab="all" class="float-tab rounded-full bg-obsidian px-4 py-2 text-xs font-semibold text-white">Visão Geral</button>
+    <button data-tab="pending" class="float-tab rounded-full px-3 py-2 text-xs font-semibold text-graphite hover:bg-mist-gray">Pendentes</button>
+    <button data-tab="n1" class="float-tab rounded-full px-3 py-2 text-xs font-semibold text-graphite hover:bg-mist-gray">Resolvidos N1</button>
+    <button data-tab="n2" class="float-tab rounded-full px-3 py-2 text-xs font-semibold text-graphite hover:bg-mist-gray">Críticos Engenharia</button>
   </nav>
 
-  <div id="backdrop" class="backdrop fixed inset-0 z-40 bg-slate-950/20 backdrop-blur-sm"></div>
-  <aside id="drawer" class="drawer fixed right-0 top-0 z-50 h-full w-full max-w-[480px] overflow-y-auto border-l border-slate-200 bg-white p-6 shadow-2xl" aria-modal="true" role="dialog">
-    <div class="flex items-center justify-between">
-      <div><p class="mono text-xs text-slate-400">CHAMADO</p><h2 id="drawerId" class="mt-1 text-xl font-semibold text-slate-950"></h2></div>
-      <button id="closeDrawer" class="grid h-9 w-9 place-items-center rounded-full border border-slate-200 text-slate-500 hover:bg-slate-50" aria-label="Fechar">×</button>
+  <div id="backdrop" class="backdrop fixed inset-0 z-40 bg-obsidian/25 backdrop-blur-sm"></div>
+  <aside id="drawer" class="drawer fixed right-0 top-0 z-50 h-full w-full max-w-[560px] overflow-y-auto border-l border-slate-edge bg-white p-6 shadow-2xl" aria-modal="true" role="dialog" aria-labelledby="drawerId">
+    <div class="flex items-start justify-between gap-4">
+      <div class="min-w-0"><p class="mono text-xs text-silver-wash">CHAMADO</p><h2 id="drawerId" class="mt-1 truncate text-xl font-semibold text-carbon"></h2></div>
+      <button id="closeDrawer" class="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-slate-edge text-graphite hover:bg-mist-gray" aria-label="Fechar">×</button>
     </div>
-    <div id="drawerContent" class="mt-6 space-y-5"></div>
+    <div id="drawerContent" class="mt-6 space-y-6"></div>
   </aside>
 
+  <div id="toasts" class="fixed bottom-24 right-4 z-[60] flex w-full max-w-sm flex-col gap-2"></div>
+
   <script>
-    const mockTickets = [
-      {id:101,user_id:'USR-204',titulo:'Falha ao gerar boleto bancário',descricao_cliente:'Ao tentar pagar uma assinatura, o boleto não é gerado e recebo uma mensagem genérica. Isso já ocorreu duas vezes hoje.',prioridade:'CRITICA',status:'Aberto',encaminhado_para:'N2-Engenharia',diagnostico_tecnico:'O endpoint /faturamento/boleto está respondendo 504; time-out entre o gateway e o serviço de emissão após 8s.',cliente:'Carlos Mendes',email:'carlos@empresa.com',plano:'Enterprise'},
-      {id:102,user_id:'USR-118',titulo:'Cobrança duplicada no checkout',descricao_cliente:'Meu cartão foi autorizado duas vezes, mas no painel aparece apenas uma compra. Preciso que a segunda cobrança seja estornada.',prioridade:'ALTA',status:'Triado',encaminhado_para:'N1-Atendimento',diagnostico_tecnico:'Evento do checkout confirmado como falso positivo: a transação 2 foi uma pré-autorização expirada, não uma cobrança efetiva.',cliente:'Mariana Costa',email:'mariana@loja.com',plano:'Pro'},
-      {id:103,user_id:'USR-330',titulo:'Exportação de relatório fica em processamento',descricao_cliente:'Ao solicitar PDF do relatório mensal, o processo permanece em “processando” e não baixa o arquivo.',prioridade:'BAIXA',status:'Aberto',encaminhado_para:'N2-Engenharia',diagnostico_tecnico:'O worker /relatorios/exportar-pdf entrou em backoff por memória insuficiente ao processar datasets acima de 50MB.',cliente:'Roberto Alves',email:'roberto@grupo.com',plano:'Enterprise'}
-    ];
-    let tickets = JSON.parse(localStorage.getItem('opsTickets') || 'null') || structuredClone(mockTickets);
-    let activeTab = 'all';
+    const STATUS_META = {
+      aberto:       { label: 'Aberto',       cls: 'border-amber-200 bg-amber-50 text-amber-800' },
+      em_triagem:   { label: 'Em triagem',   cls: 'border-cyan-200 bg-cyan-50 text-cyan-800' },
+      devolvido_n1: { label: 'Devolvido N1', cls: 'border-emerald-200 bg-emerald-50 text-emerald-800' },
+      escalado_n2:  { label: 'Escalado N2',  cls: 'border-red-200 bg-red-50 text-red-700' },
+      resolvido:    { label: 'Resolvido',    cls: 'border-slate-200 bg-slate-50 text-slate-600' },
+    };
+    const URGENCIA_META = {
+      critica: { label: 'CRÍTICA', cls: 'border-red-200 bg-red-50 text-red-700' },
+      alta:    { label: 'ALTA',    cls: 'border-amber-200 bg-amber-50 text-amber-800' },
+      media:   { label: 'MÉDIA',   cls: 'border-cyan-200 bg-cyan-50 text-cyan-800' },
+      baixa:   { label: 'BAIXA',   cls: 'border-slate-200 bg-slate-50 text-slate-600' },
+    };
+    const TRIADOS = ['devolvido_n1', 'escalado_n2', 'resolvido'];
 
-    const esc = s => String(s ?? '').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
-    const isN1 = t => (t.encaminhado_para||'').toUpperCase().includes('N1');
-    const isN2 = t => (t.encaminhado_para||'').toUpperCase().includes('N2');
-    const endpointFor = t => t.id===101?'/faturamento/boleto':t.id===102?'/checkout/pagamento':t.id===103?'/relatorios/exportar-pdf':('/api/chamados/'+t.id);
+    const state = { tickets: [], stats: null, categorias: [], activeTab: 'all', selectedId: null, selecionado: null };
 
-    function metricsAndCounts() {
-      const n1=tickets.filter(isN1).length,n2=tickets.filter(isN2).length,pending=tickets.filter(t=>t.status==='Aberto').length;
-      document.getElementById('n2Kpi').textContent=n2;
-      document.getElementById('n1Kpi').textContent=n1;
-      const mins=n1*35,h=Math.floor(mins/60),m=mins%60;
-      document.getElementById('savingsKpi').textContent=`${h}h ${m}m`;
-      document.getElementById('countAll').textContent=tickets.length;
-      document.getElementById('countPending').textContent=pending;
-      document.getElementById('countN1').textContent=n1;
-      document.getElementById('countN2').textContent=n2;
+    const $ = (id) => document.getElementById(id);
+    const esc = (s) => String(s ?? '').replace(/[&<>'"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[c]));
+
+    function fmtData(iso) {
+      if (!iso) return '—';
+      const d = new Date(iso);
+      if (Number.isNaN(d.getTime())) return iso;
+      return d.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
     }
 
-    function suggestedReply(t) {
-      return `Olá, ${esc(t.cliente || 'cliente')}. Identificamos a causa do ocorrido: ${esc(t.diagnostico_tecnico || 'o diagnóstico ainda está sendo validado')}. Já orientamos a equipe responsável e faremos o acompanhamento até a resolução. Qualquer atualização será enviada por este chamado.`;
+    async function api(path, options = {}) {
+      try {
+        const resp = await fetch(path, { cache: 'no-store', ...options });
+        let data;
+        try { data = await resp.json(); } catch { data = { ok: false, erro: 'HTTP ' + resp.status }; }
+        return data;
+      } catch (e) {
+        return { ok: false, erro: 'Falha de rede: ' + e.message };
+      }
+    }
+
+    function toast(mensagem, tipo = 'info') {
+      const cores = {
+        ok: 'border-emerald-200 bg-emerald-50 text-emerald-900',
+        erro: 'border-red-200 bg-red-50 text-red-800',
+        aviso: 'border-amber-200 bg-amber-50 text-amber-900',
+        info: 'border-slate-edge bg-white text-graphite',
+      };
+      const el = document.createElement('div');
+      el.className = 'toast rounded-xl border px-4 py-3 text-sm shadow-subtle-4 ' + (cores[tipo] || cores.info);
+      el.textContent = mensagem;
+      $('toasts').appendChild(el);
+      setTimeout(() => el.remove(), 4500);
+    }
+
+    function setLive(ok) {
+      const badge = $('liveBadge'), dot = $('liveDot'), txt = $('liveText');
+      if (ok) {
+        badge.className = 'inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700';
+        dot.className = 'pulse-dot h-2 w-2 rounded-full bg-emerald-500';
+        txt.textContent = 'Dados ao Vivo';
+      } else {
+        badge.className = 'inline-flex items-center gap-2 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[11px] font-semibold text-amber-800';
+        dot.className = 'h-2 w-2 rounded-full bg-amber-500';
+        txt.textContent = 'Reconectando…';
+      }
+    }
+
+    async function carregarPlaybook() {
+      const data = await api('/api/playbook');
+      if (data.ok) state.categorias = data.categorias_validas || [];
+    }
+
+    async function atualizar() {
+      const [tickets, stats] = await Promise.all([
+        api('/api/tickets?limite=100'),
+        api('/api/estatisticas'),
+      ]);
+      if (tickets.ok) state.tickets = tickets.tickets || [];
+      else toast(tickets.erro || 'Falha ao carregar a fila', 'erro');
+      if (stats.ok) state.stats = stats;
+      render();
+    }
+
+    function contarPorStatus(status) {
+      const st = state.stats;
+      if (st && Array.isArray(st.por_status)) {
+        const linha = st.por_status.find(r => r.status === status);
+        if (linha) return linha.total;
+      }
+      return state.tickets.filter(t => t.status === status).length;
+    }
+
+    function renderKpis() {
+      const n2 = contarPorStatus('escalado_n2');
+      const n1 = contarPorStatus('devolvido_n1');
+      $('n2Kpi').textContent = n2;
+      $('n1Kpi').textContent = n1;
+      const mins = n1 * 35, h = Math.floor(mins / 60), m = mins % 60;
+      $('savingsKpi').textContent = h + 'h ' + m + 'm';
+
+      $('countAll').textContent = state.tickets.length;
+      $('countPending').textContent = state.tickets.filter(t => t.status === 'aberto' || t.status === 'em_triagem').length;
+      $('countN1').textContent = n1;
+      $('countN2').textContent = n2;
+    }
+
+    function linhaTicket(t) {
+      const st = STATUS_META[t.status] || STATUS_META.aberto;
+      const urg = URGENCIA_META[t.urgencia_reportada] || URGENCIA_META.baixa;
+      const destino = t.status === 'escalado_n2' ? 'N2' : (t.status === 'devolvido_n1' ? 'N1' : null);
+      const dot = destino === 'N2' ? 'bg-red-500' : destino === 'N1' ? 'bg-emerald-500' : 'bg-amber-500';
+      const fila = destino === 'N2'
+        ? '<span class="rounded-full border border-red-200 bg-red-50 px-2 py-1 text-[10px] font-semibold text-red-700">N2 · Engenharia</span>'
+        : destino === 'N1'
+          ? '<span class="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 text-[10px] font-semibold text-emerald-800">N1 · Atendimento</span>'
+          : '<span class="rounded-full border border-amber-200 bg-amber-50 px-2 py-1 text-[10px] font-semibold text-amber-800">Aguardando análise</span>';
+
+      const tag = t.categoria
+        ? '<span class="mono rounded-md border border-orchid-glaze/70 bg-orchid-glaze/10 px-2 py-1 text-[11px] font-medium text-carbon">▸ ' + esc(t.categoria.replace(/_/g, ' ')) + '</span>'
+        : '<span class="mono rounded-md border border-slate-edge bg-mist-gray/60 px-2 py-1 text-[11px] font-medium text-graphite">▸ ' + esc(t.canal || 'sem categoria') + '</span>';
+
+      let blocoDiag = '';
+      if (t.diagnostico) {
+        const borda = destino === 'N1' ? 'border-emerald-500' : 'border-orchid-glaze';
+        const cor = destino === 'N1' ? 'text-emerald-700' : 'text-carbon';
+        const copiar = (destino === 'N1' && t.resposta_cliente)
+          ? '<button class="copy-n1 shrink-0 rounded-full border border-slate-edge bg-white px-2.5 py-1.5 text-[10px] font-semibold text-graphite hover:border-cobalt-signal hover:text-cobalt-signal">Copiar Resposta N1</button>'
+          : '';
+        blocoDiag = '<div class="mt-3 border-l-2 ' + borda + ' rounded-r-lg bg-paper-white px-3 py-2.5">'
+          + '<div class="flex items-start justify-between gap-3"><div><span class="mono text-[10px] font-semibold ' + cor + '">DIAGNÓSTICO:</span>'
+          + '<p class="mt-1 text-xs leading-5 text-graphite">' + esc(t.diagnostico) + '</p></div>' + copiar + '</div></div>';
+      }
+
+      return '<article class="ticket-row cursor-pointer px-5 py-4 sm:px-7" data-id="' + t.id + '">'
+        + '<div class="flex items-start gap-3">'
+        + '<span class="mt-2 h-2.5 w-2.5 shrink-0 rounded-full ' + dot + '"></span>'
+        + '<div class="min-w-0 flex-1">'
+        + '<div class="flex flex-wrap items-center gap-x-2 gap-y-1">'
+        + '<span class="mono text-xs text-silver-wash">' + esc(t.protocolo) + '</span>'
+        + '<button class="title-link text-left text-sm font-semibold text-cobalt-signal hover:underline">' + esc(t.titulo) + '</button>'
+        + '</div>'
+        + '<p class="mt-1 text-xs text-pewter">' + esc(t.cliente || 'Cliente não informado')
+        + '<span class="mx-1 text-slate-edge">•</span>' + esc(t.empresa || '—')
+        + '<span class="mx-1 text-slate-edge">•</span>' + esc(t.plano || '—') + '</p>'
+        + '<div class="mt-3 flex flex-wrap items-center gap-2">' + tag + fila
+        + '<span class="rounded-full border px-2 py-1 text-[10px] font-semibold ' + st.cls + '">● ' + st.label + '</span>'
+        + '<span class="rounded-full border px-2 py-1 text-[10px] font-semibold ' + urg.cls + '">' + urg.label + '</span>'
+        + '</div>' + blocoDiag
+        + '</div></div></article>';
     }
 
     function render() {
-      metricsAndCounts();
-      let filtered=tickets;
-      if(activeTab==='pending') filtered=tickets.filter(t=>t.status==='Aberto');
-      if(activeTab==='n1') filtered=tickets.filter(isN1);
-      if(activeTab==='n2') filtered=tickets.filter(isN2);
-      const list=document.getElementById('ticketList');
-      if(!filtered.length){list.innerHTML='<div class="px-7 py-16 text-center text-sm text-slate-400">Nenhum chamado nesta visão.</div>';return}
-      list.innerHTML=filtered.map(t=>{
-        const n1=isN1(t),n2=isN2(t),triado=t.status==='Triado';
-        const dot=n2?'bg-rose-500':n1?'bg-emerald-500':'bg-amber-500';
-        const queue=n2?'border-rose-200 bg-rose-50 text-rose-700':'border-emerald-200 bg-emerald-50 text-emerald-700';
-        const priority=t.prioridade==='CRITICA'?'border-rose-200 bg-rose-50 text-rose-700':t.prioridade==='ALTA'?'border-amber-200 bg-amber-50 text-amber-700':'border-slate-200 bg-slate-50 text-slate-600';
-        const statusColor=triado?'text-emerald-600':'text-amber-600';
-        return `<article class="ticket-row cursor-pointer px-5 py-4 sm:px-7" data-id="${esc(t.id)}">
-          <div class="flex items-start gap-3">
-            <span class="mt-2 h-2.5 w-2.5 shrink-0 rounded-full ${dot}"></span>
-            <div class="min-w-0 flex-1">
-              <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
-                <span class="mono text-xs text-slate-400">#${esc(t.id)}</span>
-                <button class="title-link text-left text-sm font-semibold text-[#0052FF] hover:underline">${esc(t.titulo)}</button>
-              </div>
-              <p class="mt-1 text-xs text-slate-500">${esc(t.cliente||'Cliente não informado')} <span class="mx-1 text-slate-300">•</span> ${esc(t.plano||'Plano não informado')}</p>
-              <div class="mt-3 flex flex-wrap items-center gap-2">
-                <span class="mono rounded-md border border-purple-200 bg-purple-50 px-2 py-1 text-[11px] font-medium text-purple-700">▸ ${esc(endpointFor(t))}</span>
-                <span class="rounded-full border ${queue} px-2 py-1 text-[10px] font-semibold">${n2?'N2-Engenharia':'N1-Atendimento'}</span>
-                <span class="rounded-full border border-slate-200 bg-white px-2 py-1 text-[10px] font-semibold ${statusColor}">● ${esc(t.status||'Aberto')}</span>
-                <span class="rounded-full border ${priority} px-2 py-1 text-[10px] font-semibold">${esc(t.prioridade||'BAIXA')}</span>
-              </div>
-              ${t.diagnostico_tecnico?`<div class="mt-3 border-l-2 ${n1?'border-emerald-500':'border-purple-400'} rounded-r-lg bg-[#F8FAFC] px-3 py-2.5">
-                <div class="flex items-start justify-between gap-3"><div><span class="mono text-[10px] font-semibold ${n1?'text-emerald-700':'text-purple-700'}">DIAGNÓSTICO MCP:</span><p class="mt-1 text-xs leading-5 text-slate-600">${esc(t.diagnostico_tecnico)}</p></div>${n1?`<button class="copy-n1 shrink-0 rounded-full border border-slate-200 bg-white px-2.5 py-1.5 text-[10px] font-semibold text-slate-600 hover:border-blue-200 hover:text-[#0052FF]">Copiar Resposta N1</button>`:''}</div>
-              </div>`:''}
-            </div>
-          </div>
-        </article>`;
-      }).join('');
-      list.querySelectorAll('.ticket-row').forEach(row=>row.addEventListener('click',e=>{if(!e.target.closest('.copy-n1'))openDrawer(tickets.find(t=>String(t.id)==row.dataset.id));}));
-      list.querySelectorAll('.copy-n1').forEach(btn=>btn.addEventListener('click',e=>{e.stopPropagation();const row=btn.closest('.ticket-row');const t=tickets.find(x=>String(x.id)==row.dataset.id);navigator.clipboard?.writeText(suggestedReply(t));btn.textContent='Copiado ✓';setTimeout(()=>btn.textContent='Copiar Resposta N1',1400)}));
+      renderKpis();
+      let filtrados = state.tickets;
+      if (state.activeTab === 'pending') filtrados = state.tickets.filter(t => t.status === 'aberto' || t.status === 'em_triagem');
+      if (state.activeTab === 'n1') filtrados = state.tickets.filter(t => t.status === 'devolvido_n1');
+      if (state.activeTab === 'n2') filtrados = state.tickets.filter(t => t.status === 'escalado_n2');
+
+      const lista = $('ticketList');
+      if (!filtrados.length) {
+        lista.innerHTML = '<div class="px-7 py-16 text-center text-sm text-silver-wash">Nenhum chamado nesta visão.</div>';
+        return;
+      }
+      lista.innerHTML = filtrados.map(linhaTicket).join('');
+
+      lista.querySelectorAll('.ticket-row').forEach(row => row.addEventListener('click', (e) => {
+        if (!e.target.closest('.copy-n1')) abrirDrawer(Number(row.dataset.id));
+      }));
+      lista.querySelectorAll('.copy-n1').forEach(btn => btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const row = btn.closest('.ticket-row');
+        const t = state.tickets.find(x => String(x.id) === row.dataset.id);
+        if (!t) return;
+        await copiar(t.resposta_cliente || '', btn, 'Copiar Resposta N1');
+      }));
     }
 
-    function openDrawer(t) {
-      document.getElementById('drawerId').textContent=`#${t.id} · ${t.titulo}`;
-      document.getElementById('drawerContent').innerHTML=`
-        <section><p class="text-xs font-semibold uppercase tracking-wider text-slate-400">Cliente</p><div class="mt-2 rounded-xl border border-slate-200 p-4"><p class="font-semibold text-slate-900">${esc(t.cliente)}</p><p class="mt-1 text-sm text-slate-500">${esc(t.email||'email não informado')} · ${esc(t.plano||'Plano')}</p></div></section>
-        <section><p class="text-xs font-semibold uppercase tracking-wider text-slate-400">Reclamação completa</p><p class="mt-2 rounded-xl bg-slate-50 p-4 text-sm leading-6 text-slate-700">${esc(t.descricao_cliente||'Sem descrição disponível.')}</p></section>
-        ${t.diagnostico_tecnico?`<section><p class="text-xs font-semibold uppercase tracking-wider text-slate-400">Diagnóstico técnico MCP</p><div class="mt-2 border-l-2 ${isN1(t)?'border-emerald-500':'border-purple-400'} rounded-r-xl bg-[#F8FAFC] p-4 mono text-xs leading-6 text-slate-700">${esc(t.diagnostico_tecnico)}</div></section>`:''}
-        <section><p class="text-xs font-semibold uppercase tracking-wider text-slate-400">Mensagem sugerida</p><div class="mt-2 rounded-xl border border-blue-100 bg-blue-50/40 p-4"><p class="text-sm leading-6 text-slate-700">${suggestedReply(t)}</p><button id="drawerCopy" class="mt-3 rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-[#0052FF]">Copiar resposta</button></div></section>`;
-      document.getElementById('backdrop').classList.add('open');document.getElementById('drawer').classList.add('open');
-      document.getElementById('drawerCopy').onclick=()=>{navigator.clipboard?.writeText(suggestedReply(t));const b=document.getElementById('drawerCopy');b.textContent='Copiado ✓';setTimeout(()=>b.textContent='Copiar resposta',1400)};
+    async function copiar(texto, botao, rotulo) {
+      try {
+        await navigator.clipboard.writeText(texto);
+        if (botao) {
+          const original = botao.textContent;
+          botao.textContent = 'Copiado ✓';
+          setTimeout(() => { botao.textContent = original || rotulo; }, 1400);
+        }
+        toast('Resposta copiada para a área de transferência.', 'ok');
+      } catch {
+        toast('Não foi possível copiar. Selecione o texto manualmente.', 'erro');
+      }
     }
-    function closeDrawer(){document.getElementById('backdrop').classList.remove('open');document.getElementById('drawer').classList.remove('open')}
 
-    function setTab(tab){activeTab=tab;document.querySelectorAll('[data-tab]').forEach(el=>{const active=el.dataset.tab===tab;if(el.classList.contains('tab')){el.classList.toggle('border-[#0052FF]',active);el.classList.toggle('text-[#0052FF]',active);el.classList.toggle('border-transparent',!active);el.classList.toggle('text-slate-500',!active)}});document.querySelectorAll('.float-tab').forEach(el=>{const active=el.dataset.tab===tab;el.classList.toggle('bg-slate-950',active);el.classList.toggle('text-white',active);el.classList.toggle('text-slate-600',!active)});render()}
+    function abrirDrawer(id) {
+      state.selectedId = id;
+      state.selecionado = null;
+      $('drawerId').textContent = 'Carregando…';
+      $('drawerContent').innerHTML = '<p class="text-sm text-pewter">Buscando ticket, evidências e logs…</p>';
+      $('backdrop').classList.add('open');
+      $('drawer').classList.add('open');
+      carregarDrawer(id);
+    }
 
-    document.querySelectorAll('[data-tab]').forEach(el=>el.addEventListener('click',()=>setTab(el.dataset.tab)));
-    document.getElementById('closeDrawer').onclick=closeDrawer;document.getElementById('backdrop').onclick=closeDrawer;
-    document.addEventListener('keydown',e=>{if(e.key==='Escape')closeDrawer()});
+    function fecharDrawer() {
+      $('backdrop').classList.remove('open');
+      $('drawer').classList.remove('open');
+      state.selectedId = null;
+    }
 
-    document.getElementById('simulateBtn').onclick=()=>{const t=tickets.find(x=>isN1(x));if(t){t.status='Triado';t.diagnostico_tecnico='Validação MCP concluída: o sintoma é reproduzível no cliente, mas não exige alteração no núcleo da Engenharia.'}else{tickets.unshift({id:104,user_id:'USR-401',titulo:'Novo chamado em análise',descricao_cliente:'Cliente relata lentidão intermitente no portal.',prioridade:'ALTA',status:'Aberto',encaminhado_para:'N2-Engenharia',diagnostico_tecnico:'Rastro MCP em coleta: latência P95 acima de 2s no endpoint /portal/status.',cliente:'Ana Ribeiro',email:'ana@cliente.com',plano:'Pro'})}localStorage.setItem('opsTickets',JSON.stringify(tickets));render();};
+    async function carregarDrawer(id) {
+      const [detalhe, analise, logs] = await Promise.all([
+        api('/api/tickets/' + id),
+        api('/api/tickets/' + id + '/analise'),
+        api('/api/tickets/' + id + '/logs?limite=12&apenas_erros=false'),
+      ]);
+      if (state.selectedId !== id) return;
+      if (!detalhe.ok) {
+        $('drawerContent').innerHTML = '<p class="text-sm text-red-600">' + esc(detalhe.erro || 'Falha ao carregar o ticket.') + '</p>';
+        return;
+      }
+      state.selecionado = {
+        ticket: detalhe.ticket,
+        analise: analise.ok ? analise : null,
+        logs: logs.ok ? (logs.logs || []) : [],
+      };
+      renderDrawer();
+    }
 
-    document.getElementById('resetBtn').onclick=async()=>{try{await fetch('/api/reset',{method:'POST'});}catch(e){}tickets=structuredClone(mockTickets);localStorage.setItem('opsTickets',JSON.stringify(tickets));render();};
+    function chipStatus(codigo, total) {
+      const n = Number(codigo);
+      const cls = n >= 500 ? 'border-red-200 bg-red-50 text-red-700'
+        : n >= 400 ? 'border-amber-200 bg-amber-50 text-amber-800'
+          : 'border-emerald-200 bg-emerald-50 text-emerald-800';
+      return '<span class="mono rounded-md border px-2 py-1 text-[11px] font-semibold ' + cls + '">' + esc(codigo) + ' × ' + total + '</span>';
+    }
 
-    async function poll(){try{const r=await fetch('/api/tickets',{cache:'no-store'});if(r.ok){const data=await r.json();if(Array.isArray(data)&&data.length){tickets=data;localStorage.setItem('opsTickets',JSON.stringify(tickets));}}}catch(e){}} setInterval(poll,1500);
-    render();poll();
+    function sugerirCategoria(t, analise) {
+      const codigos = Object.keys(analise?.evidencias?.por_status_code || {}).map(Number);
+      if (codigos.some(c => c >= 500)) return 'bug_aplicacao';
+      if (codigos.includes(429)) return 'limite_plano';
+      if (codigos.includes(402)) return 'pagamento_recusado';
+      if (codigos.includes(401)) return 'credencial_expirada';
+      if (codigos.includes(403)) return t.status_conta !== 'ativo' ? 'conta_suspensa' : 'permissao_escopo';
+      if (codigos.length && codigos.every(c => c < 400)) return 'duvida_uso';
+      return 'outro';
+    }
+
+    function respostaSugerida(t, analise) {
+      const causa = analise?.hipotese || 'estamos analisando o ocorrido com prioridade';
+      const passo = analise?.proximo_passo || 'Seguimos acompanhando o caso por este chamado.';
+      return 'Olá, ' + (t.cliente || 'cliente') + '. Identificamos a causa do ocorrido: ' + causa + '. ' + passo;
+    }
+
+    function renderDrawer() {
+      const { ticket: t, analise, logs } = state.selecionado;
+      $('drawerId').textContent = t.protocolo + ' · ' + t.titulo;
+
+      const st = STATUS_META[t.status] || STATUS_META.aberto;
+      const urg = URGENCIA_META[t.urgencia_reportada] || URGENCIA_META.baixa;
+      const destino = analise?.destino_sugerido;
+      const ev = analise?.evidencias || {};
+      const alertas = analise?.alertas_cadastro || [];
+
+      const alertasHtml = alertas.length
+        ? '<ul class="mt-2 space-y-1">' + alertas.map(a => '<li class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">⚠ ' + esc(a) + '</li>').join('') + '</ul>'
+        : '<p class="mt-2 text-xs text-silver-wash">Nenhum alerta cadastral.</p>';
+
+      const statusChips = Object.entries(ev.por_status_code || {})
+        .map(([codigo, total]) => chipStatus(codigo, total)).join('') || '<span class="text-xs text-silver-wash">Sem logs na janela.</span>';
+      const endpoints = Object.entries(ev.por_endpoint || {})
+        .map(([ep, total]) => '<span class="mono rounded-md border border-slate-edge bg-mist-gray/50 px-2 py-1 text-[11px] text-graphite">' + esc(ep) + ' × ' + total + '</span>').join('') || '<span class="text-xs text-silver-wash">—</span>';
+      const mensagens = (ev.mensagens_distintas || [])
+        .map(m => '<li class="mono text-[11px] leading-5 text-graphite">• ' + esc(m) + '</li>').join('') || '<li class="text-xs text-silver-wash">Sem mensagens de erro.</li>';
+      const traces = (ev.stack_traces || []).map((tr, i) => '<details class="mt-2 rounded-lg border border-red-200 bg-red-50/60"><summary class="cursor-pointer px-3 py-2 text-xs font-semibold text-red-700">Stack trace #' + (i + 1) + '</summary><pre class="mono overflow-x-auto px-3 pb-3 text-[11px] leading-5 text-carbon">' + esc(tr) + '</pre></details>').join('');
+
+      const lat = ev.latencia_ms || {};
+      const latencia = (lat.min != null) ? ('mín ' + lat.min + ' ms · média ' + lat.media + ' ms · máx ' + lat.max + ' ms') : 'sem dados';
+
+      const logsHtml = logs.length
+        ? '<div class="mt-2 overflow-x-auto rounded-xl border border-mist-gray"><table class="w-full text-left text-xs"><thead class="bg-mist-gray/60 text-[10px] uppercase tracking-wide text-pewter"><tr><th class="px-3 py-2">Hora</th><th class="px-3 py-2">Método</th><th class="px-3 py-2">Endpoint</th><th class="px-3 py-2">Status</th><th class="px-3 py-2">Latência</th></tr></thead><tbody class="divide-y divide-mist-gray">'
+          + logs.map(l => {
+            const erro = l.status_code >= 400;
+            const cls = erro ? 'bg-red-50/40' : '';
+            const cor = l.status_code >= 500 ? 'text-red-700 font-semibold' : erro ? 'text-amber-800 font-semibold' : 'text-emerald-700';
+            return '<tr class="' + cls + '"><td class="mono px-3 py-2 text-[11px] text-pewter">' + esc(fmtData(l.timestamp)) + '</td><td class="mono px-3 py-2 text-[11px]">' + esc(l.metodo) + '</td><td class="mono max-w-[180px] truncate px-3 py-2 text-[11px]" title="' + esc(l.endpoint) + '">' + esc(l.endpoint) + '</td><td class="mono px-3 py-2 text-[11px] ' + cor + '">' + l.status_code + '</td><td class="mono px-3 py-2 text-[11px]">' + l.latencia_ms + ' ms</td></tr>';
+          }).join('')
+          + '</tbody></table></div>'
+        : '<p class="mt-2 text-xs text-silver-wash">Nenhum log HTTP para este cliente.</p>';
+
+      let acaoHtml;
+      if (TRIADOS.includes(t.status)) {
+        const destinoAtual = t.atribuido_para === 'N2' ? 'N2 · Engenharia' : 'N1 · Atendimento';
+        acaoHtml = '<div class="rounded-xl border border-emerald-200 bg-emerald-50/50 p-4">'
+          + '<p class="text-xs font-semibold uppercase tracking-wider text-emerald-700">Triagem registrada · ' + esc(destinoAtual) + '</p>'
+          + '<p class="mt-2 text-xs text-pewter">Categoria: <span class="mono">' + esc(t.categoria || '—') + '</span> · Triado em ' + esc(fmtData(t.triado_em)) + '</p>'
+          + '<p class="mt-3 text-xs font-semibold text-graphite">Diagnóstico</p><p class="mt-1 text-sm leading-6 text-carbon">' + esc(t.diagnostico || '—') + '</p>'
+          + '<p class="mt-3 text-xs font-semibold text-graphite">Ação recomendada</p><p class="mt-1 text-sm leading-6 text-carbon">' + esc(t.acao_recomendada || '—') + '</p>'
+          + '<p class="mt-3 text-xs font-semibold text-graphite">Resposta ao cliente</p><p class="mt-1 text-sm leading-6 text-carbon">' + esc(t.resposta_cliente || '—') + '</p>'
+          + '<button id="drawerCopy" class="mt-3 rounded-full border border-slate-edge bg-white px-3 py-2 text-xs font-semibold text-cobalt-signal">Copiar resposta</button>'
+          + '</div>';
+      } else {
+        const categorias = state.categorias.length ? state.categorias : ['outro'];
+        const opcoes = categorias.map(c => '<option value="' + esc(c) + '"' + (c === sugerirCategoria(t, analise) ? ' selected' : '') + '>' + esc(c.replace(/_/g, ' ')) + '</option>').join('');
+        acaoHtml = '<form id="formTriagem" class="space-y-3 rounded-xl border border-mist-gray p-4">'
+          + '<p class="text-xs font-semibold uppercase tracking-wider text-pewter">Registrar triagem</p>'
+          + '<div class="grid gap-3 sm:grid-cols-2">'
+          + '<label class="block text-xs font-semibold text-graphite">Destino<select id="fDestino" class="mt-1 w-full rounded-lg border border-slate-edge bg-white px-3 py-2 text-sm font-normal"><option value="N1"' + (destino === 'N1' ? ' selected' : '') + '>N1 · Atendimento</option><option value="N2"' + (destino === 'N2' ? ' selected' : '') + '>N2 · Engenharia</option></select></label>'
+          + '<label class="block text-xs font-semibold text-graphite">Categoria<select id="fCategoria" class="mt-1 w-full rounded-lg border border-slate-edge bg-white px-3 py-2 text-sm font-normal">' + opcoes + '</select></label>'
+          + '</div>'
+          + '<label class="block text-xs font-semibold text-graphite">Diagnóstico<textarea id="fDiagnostico" rows="3" class="mt-1 w-full rounded-lg border border-slate-edge bg-white px-3 py-2 text-sm font-normal">' + esc(analise?.hipotese || '') + '</textarea></label>'
+          + '<label class="block text-xs font-semibold text-graphite">Ação recomendada<textarea id="fAcao" rows="2" class="mt-1 w-full rounded-lg border border-slate-edge bg-white px-3 py-2 text-sm font-normal">' + esc(analise?.proximo_passo || '') + '</textarea></label>'
+          + '<label class="block text-xs font-semibold text-graphite">Resposta ao cliente<textarea id="fResposta" rows="4" class="mt-1 w-full rounded-lg border border-slate-edge bg-white px-3 py-2 text-sm font-normal">' + esc(respostaSugerida(t, analise)) + '</textarea></label>'
+          + '<p id="formErro" class="hidden rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700"></p>'
+          + '<button id="btnTriar" type="submit" class="w-full rounded-full bg-cobalt-signal px-4 py-2.5 text-sm font-semibold text-white transition hover:opacity-90">Registrar e encaminhar</button>'
+          + '</form>';
+      }
+
+      $('drawerContent').innerHTML =
+        '<section><p class="text-xs font-semibold uppercase tracking-wider text-silver-wash">Cliente</p>'
+        + '<div class="mt-2 rounded-xl border border-mist-gray p-4"><p class="font-semibold text-carbon">' + esc(t.cliente) + '</p>'
+        + '<p class="mt-1 text-sm text-pewter">' + esc(t.email || 'email não informado') + ' · ' + esc(t.empresa || '—') + ' · ' + esc(t.plano || '—') + '</p>'
+        + '<p class="mt-1 text-xs text-pewter">Conta: <span class="mono">' + esc(t.status_conta || '—') + '</span> · Logs do cliente: ' + (t.logs_do_cliente?.total ?? 0) + ' (' + (t.logs_do_cliente?.com_erro ?? 0) + ' com erro)</p>'
+        + alertasHtml + '</div></section>'
+
+        + '<section><p class="text-xs font-semibold uppercase tracking-wider text-silver-wash">Reclamação</p>'
+        + '<p class="mt-2 rounded-xl bg-paper-white p-4 text-sm leading-6 text-graphite">' + esc(t.descricao || 'Sem descrição disponível.') + '</p>'
+        + '<div class="mt-2 flex flex-wrap gap-2 text-[10px] font-semibold">'
+        + '<span class="rounded-full border px-2 py-1 ' + st.cls + '">● ' + st.label + '</span>'
+        + '<span class="rounded-full border px-2 py-1 ' + urg.cls + '">' + urg.label + '</span>'
+        + '<span class="rounded-full border border-slate-edge bg-mist-gray/60 px-2 py-1 text-graphite">canal: ' + esc(t.canal || '—') + '</span>'
+        + '<span class="rounded-full border border-slate-edge bg-mist-gray/60 px-2 py-1 text-graphite">aberto em ' + esc(fmtData(t.criado_em)) + '</span>'
+        + '</div></section>'
+
+        + (analise
+          ? '<section><p class="text-xs font-semibold uppercase tracking-wider text-silver-wash">Diagnóstico automático</p>'
+            + '<div class="mt-2 rounded-xl border border-mist-gray p-4">'
+            + '<div class="flex flex-wrap items-center gap-2">'
+            + '<span class="rounded-full border px-2 py-1 text-[10px] font-semibold ' + (destino === 'N2' ? 'border-red-200 bg-red-50 text-red-700' : 'border-emerald-200 bg-emerald-50 text-emerald-800') + '">destino sugerido: ' + esc(destino) + '</span>'
+            + '<span class="rounded-full border border-slate-edge bg-mist-gray/60 px-2 py-1 text-[10px] font-semibold text-graphite">' + (analise.janela_analisada?.logs_analisados ?? 0) + ' logs na janela</span>'
+            + '<span class="rounded-full border border-slate-edge bg-mist-gray/60 px-2 py-1 text-[10px] font-semibold text-graphite">' + esc(latencia) + '</span>'
+            + '</div>'
+            + '<p class="mt-3 text-sm leading-6 text-carbon">' + esc(analise.hipotese) + '</p>'
+            + '<div class="mt-3 flex flex-wrap gap-2">' + statusChips + '</div>'
+            + '<div class="mt-3 flex flex-wrap gap-2">' + endpoints + '</div>'
+            + '<ul class="mt-3 space-y-1">' + mensagens + '</ul>'
+            + traces
+            + '</div></section>'
+          : '<section><p class="text-xs font-semibold uppercase tracking-wider text-silver-wash">Diagnóstico automático</p><p class="mt-2 text-sm text-pewter">Análise indisponível no momento.</p></section>')
+
+        + '<section><p class="text-xs font-semibold uppercase tracking-wider text-silver-wash">Últimos logs HTTP</p>' + logsHtml + '</section>'
+        + '<section><p class="text-xs font-semibold uppercase tracking-wider text-silver-wash">Triagem</p>' + acaoHtml + '</section>';
+
+      const copy = $('drawerCopy');
+      if (copy) copy.onclick = () => copiar(t.resposta_cliente || '', copy, 'Copiar resposta');
+
+      const form = $('formTriagem');
+      if (form) form.addEventListener('submit', (ev) => enviarTriagem(ev, t.id));
+    }
+
+    async function enviarTriagem(ev, id) {
+      ev.preventDefault();
+      const botao = $('btnTriar');
+      const erroEl = $('formErro');
+      const payload = {
+        destino: $('fDestino').value,
+        categoria: $('fCategoria').value,
+        diagnostico: $('fDiagnostico').value,
+        acao_recomendada: $('fAcao').value,
+        resposta_cliente: $('fResposta').value,
+      };
+      botao.disabled = true;
+      botao.textContent = 'Salvando…';
+      erroEl.classList.add('hidden');
+
+      const res = await api('/api/tickets/' + id + '/triagem', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) {
+        erroEl.textContent = res.erro || 'Não foi possível registrar a triagem.';
+        erroEl.classList.remove('hidden');
+        botao.disabled = false;
+        botao.textContent = 'Registrar e encaminhar';
+        return;
+      }
+
+      toast('Triagem registrada: ' + res.protocolo + ' → ' + res.atribuido_para, 'ok');
+      (res.avisos || []).forEach(a => toast(a, 'aviso'));
+      await atualizar();
+      await carregarDrawer(id);
+    }
+
+    function setTab(tab) {
+      state.activeTab = tab;
+      document.querySelectorAll('[data-tab]').forEach(el => {
+        const ativo = el.dataset.tab === tab;
+        if (el.classList.contains('tab')) {
+          el.classList.toggle('border-cobalt-signal', ativo);
+          el.classList.toggle('text-cobalt-signal', ativo);
+          el.classList.toggle('border-transparent', !ativo);
+          el.classList.toggle('text-pewter', !ativo);
+        }
+      });
+      document.querySelectorAll('.float-tab').forEach(el => {
+        const ativo = el.dataset.tab === tab;
+        el.classList.toggle('bg-obsidian', ativo);
+        el.classList.toggle('text-white', ativo);
+        el.classList.toggle('text-graphite', !ativo);
+      });
+      render();
+    }
+
+    function conectarSSE() {
+      const es = new EventSource('/api/events');
+      es.onopen = () => setLive(true);
+      es.onerror = () => setLive(false);
+      es.onmessage = (ev) => {
+        let data;
+        try { data = JSON.parse(ev.data); } catch { return; }
+        if (data.tipo === 'conectado') { setLive(true); return; }
+        atualizar();
+        if (data.tipo === 'reset') fecharDrawer();
+      };
+    }
+
+    document.querySelectorAll('[data-tab]').forEach(el => el.addEventListener('click', () => setTab(el.dataset.tab)));
+    $('closeDrawer').onclick = fecharDrawer;
+    $('backdrop').onclick = fecharDrawer;
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') fecharDrawer(); });
+
+    $('simulateBtn').onclick = () => {
+      const proximo = state.tickets.find(t => t.status === 'aberto' || t.status === 'em_triagem');
+      if (!proximo) { toast('Não há tickets pendentes de triagem.', 'info'); return; }
+      abrirDrawer(proximo.id);
+    };
+
+    $('resetBtn').onclick = async () => {
+      if (!confirm('Recriar o banco de demonstração? A triagem atual será perdida.')) return;
+      const res = await api('/api/reset', { method: 'POST' });
+      if (res.ok) toast('Banco de demonstração recriado.', 'ok');
+      else toast(res.erro || 'Falha ao resetar a fila.', 'erro');
+      await atualizar();
+    };
+
+    (async () => {
+      await carregarPlaybook();
+      await atualizar();
+      conectarSSE();
+    })();
   </script>
 </body>
 </html>

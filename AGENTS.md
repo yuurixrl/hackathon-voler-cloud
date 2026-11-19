@@ -2,40 +2,70 @@
 
 ## O que é
 
-Servidor MCP local (FastMCP + SQLite) que apoia a triagem de tickets N1 → N2. Ver
+Aplicação local de triagem N1 → N2 com **duas interfaces sobre a mesma camada de domínio**:
+
+- `server.py` — servidor MCP (FastMCP + stdio) usado pelo Claude Desktop;
+- `api.py` — API HTTP (FastAPI) que serve a interface web com SSE.
+
+Ambas consomem `triagem.py`, que concentra SQLite e regras de classificação. Ver
 [`CONTEXTO_HACKATHON.md`](CONTEXTO_HACKATHON.md) para a especificação e
 [`README.md`](README.md) para instalação e demo.
 
 ## Comandos
 
 ```powershell
-# instalar
+# instalar (Python + front)
 python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
+npm install
 
 # recriar banco de demonstração
 .\.venv\Scripts\python.exe setup_db.py
 
-# rodar o servidor (stdio)
+# compilar CSS (necessário após mexer em index.html/app.css)
+npm run build:css          # ou: npm run watch:css
+
+# rodar a interface web (http://127.0.0.1:8000)
+.\.venv\Scripts\python.exe api.py
+
+# rodar o servidor MCP (stdio)
 .\.venv\Scripts\python.exe server.py
 ```
+
+Porta/host da API via `OPS_DETECTIVE_PORT` (padrão `8000`) e `OPS_DETECTIVE_HOST`
+(padrão `127.0.0.1`). Banco via `OPS_DETECTIVE_DB`.
 
 ## Mapa do código
 
 | Arquivo | Conteúdo |
 |---|---|
 | `setup_db.py` | schema + massa de dados (clientes, tickets, logs) |
-| `server.py` | instância `FastMCP`, helpers de conexão e as 7 tools + 1 resource |
+| `triagem.py` | domínio: conexão SQLite, consultas, análise de causa raiz, triagem, stats, playbook, health e reset |
+| `server.py` | adaptador MCP: 7 tools + 1 resource (`playbook://triagem`) |
+| `api.py` | adaptador HTTP: rotas `/api/*`, SSE, arquivos estáticos |
+| `index.html` | front-end (KPIs, abas, drawer, evidências, formulário, EventSource) |
+| `app.css` | entrada Tailwind v4 (`@import`, `@source`, tokens do design system) |
+| `static/app.css` | CSS compilado, servido ao navegador — **versionado** |
+| `package.json` | scripts `build:css` / `watch:css` (Tailwind v4) |
 | `suporte.db` | SQLite gerado; ignorado no git |
 
 ## Convenções
 
 - **Código e mensagens em português**; nomes de funções/tabelas em `snake_case`.
 - **SQL sempre parametrizado** (`?`) — nada de f-string com entrada do usuário.
-- Consultas abrem o banco em **modo read-only** (`mode=ro`); só `triar_ticket` escreve.
-- Tools devolvem `{"ok": true, ...}` ou `{"ok": false, "erro": "..."}` — nunca levantam
-  exceção para erro de entrada, para o Claude conseguir se corrigir.
+- Consultas abrem o banco em **modo read-only** (`mode=ro`); só `triar_ticket` e
+  `reset_demo` escrevem.
+- `triagem.py` devolve `{"ok": true, ...}` ou `{"ok": false, "erro": "..."}` — nunca
+  levanta exceção para erro de entrada, para o agente conseguir se corrigir.
+- `api.py` usa `_json()` para traduzir isso: `ok: true` → 200; erro com "não encontrado"
+  → 404; demais erros → 400.
 - Timestamps em **ISO 8601 UTC** (strings `TEXT` no SQLite).
+- Filtros/abas do front usam `status` (`aberto`, `em_triagem`, `devolvido_n1`,
+  `escalado_n2`, `resolvido`), **não** `atribuido_para` (os tickets semeados já vêm com
+  `atribuido_para='N1'` mesmo estando abertos).
+- SSE publica `{"tipo": "triagem", ...}` e `{"tipo": "reset"}` no barramento em memória;
+  o front recarrega fila/estatísticas ao receber. Eventos de clientes lentos são
+  descartados (`QueueFull`) para não travar a API.
 
 ## Cenários semeado no banco
 
@@ -51,6 +81,13 @@ python -m venv .venv
 | TK-1008 | Boutique Estilo | `403` conta inadimplente | N1 |
 
 Se mudar a massa de dados, atualize esta tabela e o roteiro no `README.md`.
+
+## Rotas da API
+
+`GET /` · `GET /api/health` · `GET /api/tickets` · `GET /api/tickets/{id}` ·
+`GET /api/tickets/{id}/analise` · `GET /api/tickets/{id}/logs` ·
+`POST /api/tickets/{id}/triagem` · `GET /api/estatisticas` · `GET /api/playbook` ·
+`POST /api/reset` · `GET /api/events`.
 
 ## Teste rápido via cliente MCP (stdio)
 
@@ -74,6 +111,13 @@ async def main():
 asyncio.run(main())
 ```
 
+Teste rápido da API:
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:8000/api/health
+Invoke-RestMethod http://127.0.0.1:8000/api/tickets/5/analise
+```
+
 ## Armadilhas conhecidas
 
 - O SDK `mcp` **2.x** removeu `mcp.server.fastmcp` (virou `MCPServer`). O
@@ -81,3 +125,10 @@ asyncio.run(main())
 - Ao apontar o Claude Desktop para o servidor, use o Python **do `.venv`**;
   o Python global não tem o pacote `mcp` instalado.
 - `suporte.db` não é versionado: rode `setup_db.py` depois de clonar.
+- O navegador carrega `static/app.css`, não `app.css`: após alterar HTML/CSS, rode
+  `npm run build:css`, senão as mudanças não aparecem.
+- `npm install` só é necessário para gerar o CSS; a API em si roda só com o `requirements.txt`.
+- `POST /api/reset` e qualquer teste de `POST /triagem` alteram o banco; rode
+  `setup_db.py` ao final para devolver a demo aos 8 tickets abertos.
+- Config real do Claude Desktop Store fica em
+  `%LOCALAPPDATA%\Claude-Data\<perfil>\claude_desktop_config.json`, não em `%APPDATA%\Claude`.

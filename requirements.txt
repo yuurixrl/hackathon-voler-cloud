@@ -1,2 +1,6 @@
 # Fixado em 1.x: o FastMCP (API usada neste projeto) foi renomeado para MCPServer no SDK 2.x
 mcp>=1.9.0,<2
+
+# API web (interface)
+fastapi>=0.115
+uvicorn>=0.30

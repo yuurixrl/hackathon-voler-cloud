@@ -11,6 +11,9 @@ suporte.db-journal
 suporte.db-wal
 suporte.db-shm
 
+# Front-end (Tailwind v4)
+node_modules/
+
 # Ambiente
 .env
 .vscode/

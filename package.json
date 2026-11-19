@@ -1,0 +1,13 @@
+{
+  "name": "ops-detective-web",
+  "private": true,
+  "description": "Front-end (Tailwind v4) da interface web do Ops Detective.",
+  "scripts": {
+    "build:css": "tailwindcss -i ./app.css -o ./static/app.css --minify",
+    "watch:css": "tailwindcss -i ./app.css -o ./static/app.css --watch"
+  },
+  "devDependencies": {
+    "@tailwindcss/cli": "^4.1.0",
+    "tailwindcss": "^4.1.0"
+  }
+}
