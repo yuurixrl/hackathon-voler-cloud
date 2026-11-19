@@ -147,6 +147,83 @@ body {
   to { opacity: 1; transform: translateY(0); }
 }
 
+/* Hotbar inferior: entra deslizando e reage ao ponteiro. */
+.hotbar {
+  animation: hotbar-in 0.45s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+}
+
+@keyframes hotbar-in {
+  from { opacity: 0; transform: translateY(24px) scale(0.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.float-tab {
+  transition: background-color 0.2s ease, color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.float-tab:hover {
+  transform: translateY(-2px);
+}
+
+.float-tab:active {
+  transform: translateY(0) scale(0.95);
+}
+
+.float-tab.bg-obsidian {
+  animation: tab-ativa 0.26s ease-out;
+  box-shadow: 0 4px 14px rgba(10, 13, 22, 0.18);
+}
+
+@keyframes tab-ativa {
+  0% { transform: scale(0.9); }
+  60% { transform: scale(1.05); }
+  100% { transform: scale(1); }
+}
+
+/* Lancador e chat: o botao sai de cena quando o pop-up abre. */
+#chatLauncher,
+#chatPanel {
+  transition: opacity 0.22s ease, transform 0.22s cubic-bezier(0.2, 0.8, 0.2, 1), visibility 0.22s;
+  transform-origin: bottom right;
+}
+
+#chatLauncher {
+  animation: launcher-in 0.45s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+}
+
+@keyframes launcher-in {
+  from { opacity: 0; transform: translateY(16px) scale(0.8); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+#chatLauncher.chat-oculto {
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(14px) scale(0.8);
+  pointer-events: none;
+}
+
+#chatPanel {
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(18px) scale(0.96);
+  pointer-events: none;
+}
+
+#chatPanel.chat-visivel {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0) scale(1);
+  pointer-events: auto;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hotbar, .float-tab, .float-tab.bg-obsidian, #chatLauncher, #chatPanel {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
 /* Destaque da escrita feita pelo MCP: verde = N1, vermelho = N2 */
 .flash-n1 {
   animation: flash-n1 2.8s ease-out;
