@@ -18,7 +18,7 @@
             <div class="mb-3 flex flex-wrap items-center gap-3 text-xs font-medium text-pewter">
               <nav aria-label="Breadcrumb"><span class="text-carbon">Ops Detective</span><span class="mx-2 text-slate-edge">/</span>Fila de Triagem N1 → N2</nav>
               <span id="liveBadge" class="inline-flex items-center gap-2 rounded-full border border-slate-edge bg-mist-gray px-2.5 py-1 text-[11px] font-semibold text-graphite">
-                <span id="liveDot" class="h-2 w-2 rounded-full bg-amber-500"></span><span id="liveText">Conectando…</span>
+                <span id="liveDot" class="h-2 w-2 rounded-full bg-amber-500"></span><span id="liveText">Conectando ao SQLite…</span>
               </span>
             </div>
             <h1 class="text-[25px] font-semibold tracking-tight text-carbon sm:text-[30px]">Triagem &amp; Diagnóstico em Tempo Real</h1>
@@ -92,7 +92,10 @@
     };
     const TRIADOS = ['devolvido_n1', 'escalado_n2', 'resolvido'];
 
-    const state = { tickets: [], stats: null, categorias: [], activeTab: 'all', selectedId: null, selecionado: null };
+    const state = {
+      tickets: [], stats: null, categorias: [], activeTab: 'all', selectedId: null, selecionado: null,
+      bancoOk: false, sseOk: false, pendentes: 0, mudados: new Set(), ultimaAssinatura: null,
+    };
 
     const $ = (id) => document.getElementById(id);
     const esc = (s) => String(s ?? '').replace(/[&<>'"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[c]));
@@ -129,17 +132,23 @@
       setTimeout(() => el.remove(), 4500);
     }
 
-    function setLive(ok) {
+    function atualizarBadge() {
       const badge = $('liveBadge'), dot = $('liveDot'), txt = $('liveText');
-      if (ok) {
-        badge.className = 'inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700';
-        dot.className = 'pulse-dot h-2 w-2 rounded-full bg-emerald-500';
-        txt.textContent = 'Dados ao Vivo';
-      } else {
-        badge.className = 'inline-flex items-center gap-2 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[11px] font-semibold text-amber-800';
-        dot.className = 'h-2 w-2 rounded-full bg-amber-500';
-        txt.textContent = 'Reconectando…';
+      if (!state.bancoOk) {
+        badge.className = 'inline-flex items-center gap-2 rounded-full border border-red-200 bg-red-50 px-2.5 py-1 text-[11px] font-semibold text-red-700';
+        dot.className = 'h-2 w-2 rounded-full bg-red-500';
+        txt.textContent = 'SQLite Desconectado';
+        return;
       }
+      badge.className = 'inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700';
+      dot.className = (state.sseOk ? 'pulse-dot ' : '') + 'h-2 w-2 rounded-full ' + (state.sseOk ? 'bg-emerald-500' : 'bg-amber-500');
+      txt.textContent = 'SQLite Conectado (Ao Vivo) · ' + state.pendentes + ' aguardando triagem';
+    }
+
+    function setSse(ok) { state.sseOk = ok; atualizarBadge(); }
+
+    function assinatura(lista) {
+      return lista.map(t => [t.id, t.status, t.triado_em || '', t.categoria || '', t.diagnostico || ''].join(':')).join('|');
     }
 
     async function carregarPlaybook() {
@@ -147,15 +156,48 @@
       if (data.ok) state.categorias = data.categorias_validas || [];
     }
 
-    async function atualizar() {
-      const [tickets, stats] = await Promise.all([
+    async function atualizar(origem = 'manual') {
+      const [tickets, stats, health] = await Promise.all([
         api('/api/tickets?limite=100'),
         api('/api/estatisticas'),
+        api('/api/health'),
       ]);
-      if (tickets.ok) state.tickets = tickets.tickets || [];
-      else toast(tickets.erro || 'Falha ao carregar a fila', 'erro');
+
+      if (tickets.ok) {
+        const lista = tickets.tickets || [];
+        const nova = assinatura(lista);
+        const mudou = state.ultimaAssinatura !== null && nova !== state.ultimaAssinatura;
+        const antes = new Map(state.tickets.map(t => [t.id, t]));
+        state.ultimaAssinatura = nova;
+        state.mudados = new Set();
+        if (mudou) {
+          lista.forEach(t => {
+            const prev = antes.get(t.id);
+            if (!prev || prev.status !== t.status || prev.triado_em !== t.triado_em || prev.diagnostico !== t.diagnostico) {
+              state.mudados.add(t.id);
+            }
+          });
+        }
+        state.tickets = lista;
+      } else {
+        toast(tickets.erro || 'Falha ao carregar a fila', 'erro');
+      }
+
       if (stats.ok) state.stats = stats;
+      state.bancoOk = !!(health.ok && health.banco);
+      state.pendentes = (stats.ok && stats.pendentes_de_triagem != null)
+        ? stats.pendentes_de_triagem
+        : state.tickets.filter(t => t.status === 'aberto' || t.status === 'em_triagem').length;
+      atualizarBadge();
       render();
+
+      // Mudança feita pelo MCP no chat tambem deve atualizar o drawer aberto.
+      if (state.selectedId && state.mudados.has(state.selectedId) && origem !== 'triage') {
+        carregarDrawer(state.selectedId);
+      }
+      if (state.mudados.size) {
+        setTimeout(() => { state.mudados = new Set(); render(); }, 3200);
+      }
     }
 
     function contarPorStatus(status) {
@@ -185,6 +227,11 @@
       const st = STATUS_META[t.status] || STATUS_META.aberto;
       const urg = URGENCIA_META[t.urgencia_reportada] || URGENCIA_META.baixa;
       const destino = t.status === 'escalado_n2' ? 'N2' : (t.status === 'devolvido_n1' ? 'N1' : null);
+      const mudou = state.mudados.has(t.id);
+      const flash = mudou ? (t.status === 'escalado_n2' ? ' flash-n2' : ' flash-n1') : '';
+      const selo = mudou
+        ? '<span class="rounded-full border border-emerald-300 bg-emerald-100 px-2 py-1 text-[10px] font-bold text-emerald-800">ATUALIZADO AGORA</span>'
+        : '';
       const dot = destino === 'N2' ? 'bg-red-500' : destino === 'N1' ? 'bg-emerald-500' : 'bg-amber-500';
       const fila = destino === 'N2'
         ? '<span class="rounded-full border border-red-200 bg-red-50 px-2 py-1 text-[10px] font-semibold text-red-700">N2 · Engenharia</span>'
@@ -208,7 +255,7 @@
           + '<p class="mt-1 text-xs leading-5 text-graphite">' + esc(t.diagnostico) + '</p></div>' + copiar + '</div></div>';
       }
 
-      return '<article class="ticket-row cursor-pointer px-5 py-4 sm:px-7" data-id="' + t.id + '">'
+      return '<article class="ticket-row' + flash + ' cursor-pointer px-5 py-4 sm:px-7" data-id="' + t.id + '">'
         + '<div class="flex items-start gap-3">'
         + '<span class="mt-2 h-2.5 w-2.5 shrink-0 rounded-full ' + dot + '"></span>'
         + '<div class="min-w-0 flex-1">'
@@ -219,7 +266,7 @@
         + '<p class="mt-1 text-xs text-pewter">' + esc(t.cliente || 'Cliente não informado')
         + '<span class="mx-1 text-slate-edge">•</span>' + esc(t.empresa || '—')
         + '<span class="mx-1 text-slate-edge">•</span>' + esc(t.plano || '—') + '</p>'
-        + '<div class="mt-3 flex flex-wrap items-center gap-2">' + tag + fila
+        + '<div class="mt-3 flex flex-wrap items-center gap-2">' + tag + fila + selo
         + '<span class="rounded-full border px-2 py-1 text-[10px] font-semibold ' + st.cls + '">● ' + st.label + '</span>'
         + '<span class="rounded-full border px-2 py-1 text-[10px] font-semibold ' + urg.cls + '">' + urg.label + '</span>'
         + '</div>' + blocoDiag
@@ -463,7 +510,7 @@
 
       toast('Triagem registrada: ' + res.protocolo + ' → ' + res.atribuido_para, 'ok');
       (res.avisos || []).forEach(a => toast(a, 'aviso'));
-      await atualizar();
+      await atualizar('triage');
       await carregarDrawer(id);
     }
 
@@ -489,13 +536,13 @@
 
     function conectarSSE() {
       const es = new EventSource('/api/events');
-      es.onopen = () => setLive(true);
-      es.onerror = () => setLive(false);
+      es.onopen = () => setSse(true);
+      es.onerror = () => setSse(false);
       es.onmessage = (ev) => {
         let data;
         try { data = JSON.parse(ev.data); } catch { return; }
-        if (data.tipo === 'conectado') { setLive(true); return; }
-        atualizar();
+        if (data.tipo === 'conectado') { setSse(true); return; }
+        atualizar('sse');
         if (data.tipo === 'reset') fecharDrawer();
       };
     }
@@ -521,8 +568,11 @@
 
     (async () => {
       await carregarPlaybook();
-      await atualizar();
+      await atualizar('init');
       conectarSSE();
+      // Rede de seguranca: o SSE entrega na hora, o polling de 1s garante que
+      // uma escrita feita pelo MCP no SQLite tambem apareca sem recarregar a pagina.
+      setInterval(() => atualizar('polling'), 1000);
     })();
   </script>
 </body>

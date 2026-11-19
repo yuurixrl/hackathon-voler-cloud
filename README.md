@@ -22,6 +22,7 @@ ops-detective/
 ├── triagem.py                     # camada de domínio: SQLite + regras de triagem
 ├── server.py                      # adaptador MCP (FastMCP, stdio)
 ├── api.py                         # API HTTP + SSE + arquivos estáticos
+├── painel_ao_vivo.py              # lançador do painel de apresentação (porta 8080)
 ├── index.html                     # interface web
 ├── app.css                        # entrada do Tailwind v4 (tokens do design system)
 ├── static/app.css                 # CSS compilado (versionado)
@@ -30,6 +31,7 @@ ops-detective/
 ├── requirements.txt
 ├── claude_desktop_config.example.json
 ├── CONTEXTO_HACKATHON.md          # especificação do projeto
+├── APRESENTACAO.md                # roteiro de palco split-screen (3 minutos)
 ├── AGENTS.md                      # guia para agentes/devs que mexem no repo
 └── .venv/                         # ambiente virtual (não versionado)
 ```
@@ -93,6 +95,23 @@ inexistente retorna 404.
 
 > Se editar `index.html` ou `app.css`, rode `npm run build:css` (ou `npm run watch:css`).
 > O navegador carrega somente `static/app.css`.
+
+### Painel de apresentação ao vivo (porta 8080)
+
+Para a demonstração em split-screen, use o lançador — ele reaproveita a mesma API e
+serve o front na porta do roteiro de palco:
+
+```powershell
+.\.venv\Scripts\python.exe setup_db.py
+.\.venv\Scripts\python.exe painel_ao_vivo.py   # http://127.0.0.1:8080
+```
+
+O painel exibe o selo **`SQLite Conectado (Ao Vivo) · 8 aguardando triagem`**, recebe
+as mudanças por SSE e, como rede de segurança, consulta o banco a cada 1 segundo.
+Quando o Claude triar um ticket pelo MCP, o card pisca verde (N1) ou vermelho (N2)
+com o selo **`ATUALIZADO AGORA`**, sem recarregar a página.
+
+O roteiro completo (4 atos, 3 minutos) está em [`APRESENTACAO.md`](APRESENTACAO.md).
 
 ## Conectar ao Claude Desktop
 

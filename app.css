@@ -141,6 +141,25 @@ body {
   to { opacity: 1; transform: translateY(0); }
 }
 
+/* Destaque da escrita feita pelo MCP: verde = N1, vermelho = N2 */
+.flash-n1 {
+  animation: flash-n1 2.8s ease-out;
+}
+
+.flash-n2 {
+  animation: flash-n2 2.8s ease-out;
+}
+
+@keyframes flash-n1 {
+  0%, 30% { background: #d1fae5; box-shadow: inset 3px 0 0 #10b981; }
+  100% { background: transparent; box-shadow: inset 3px 0 0 transparent; }
+}
+
+@keyframes flash-n2 {
+  0%, 30% { background: #fee2e2; box-shadow: inset 3px 0 0 #ef4444; }
+  100% { background: transparent; box-shadow: inset 3px 0 0 transparent; }
+}
+
 button:focus-visible,
 a:focus-visible,
 input:focus-visible,

@@ -7,9 +7,11 @@ Aplicação local de triagem N1 → N2 com **duas interfaces sobre a mesma camad
 - `server.py` — servidor MCP (FastMCP + stdio) usado pelo Claude Desktop;
 - `api.py` — API HTTP (FastAPI) que serve a interface web com SSE.
 
-Ambas consomem `triagem.py`, que concentra SQLite e regras de classificação. Ver
-[`CONTEXTO_HACKATHON.md`](CONTEXTO_HACKATHON.md) para a especificação e
-[`README.md`](README.md) para instalação e demo.
+Ambas consomem `triagem.py`, que concentra SQLite e regras de classificação. O
+`painel_ao_vivo.py` é apenas o lançador da porta 8080 para a apresentação split-screen. Ver
+[`CONTEXTO_HACKATHON.md`](CONTEXTO_HACKATHON.md) para a especificação,
+[`README.md`](README.md) para instalação e demo e
+[`APRESENTACAO.md`](APRESENTACAO.md) para o roteiro de palco.
 
 ## Comandos
 
@@ -28,6 +30,9 @@ npm run build:css          # ou: npm run watch:css
 # rodar a interface web (http://127.0.0.1:8000)
 .\.venv\Scripts\python.exe api.py
 
+# rodar o painel de apresentação (http://127.0.0.1:8080)
+.\.venv\Scripts\python.exe painel_ao_vivo.py
+
 # rodar o servidor MCP (stdio)
 .\.venv\Scripts\python.exe server.py
 ```
@@ -43,7 +48,8 @@ Porta/host da API via `OPS_DETECTIVE_PORT` (padrão `8000`) e `OPS_DETECTIVE_HOS
 | `triagem.py` | domínio: conexão SQLite, consultas, análise de causa raiz, triagem, stats, playbook, health e reset |
 | `server.py` | adaptador MCP: 7 tools + 1 resource (`playbook://triagem`) |
 | `api.py` | adaptador HTTP: rotas `/api/*`, SSE, arquivos estáticos |
-| `index.html` | front-end (KPIs, abas, drawer, evidências, formulário, EventSource) |
+| `painel_ao_vivo.py` | lançador do painel de apresentação na porta 8080 (reusa `api.app`) |
+| `index.html` | front-end (KPIs, abas, drawer, evidências, formulário, SSE + polling 1s) |
 | `app.css` | entrada Tailwind v4 (`@import`, `@source`, tokens do design system) |
 | `static/app.css` | CSS compilado, servido ao navegador — **versionado** |
 | `package.json` | scripts `build:css` / `watch:css` (Tailwind v4) |
@@ -66,6 +72,11 @@ Porta/host da API via `OPS_DETECTIVE_PORT` (padrão `8000`) e `OPS_DETECTIVE_HOS
 - SSE publica `{"tipo": "triagem", ...}` e `{"tipo": "reset"}` no barramento em memória;
   o front recarrega fila/estatísticas ao receber. Eventos de clientes lentos são
   descartados (`QueueFull`) para não travar a API.
+- O front também faz **polling de 1s** em `/api/tickets`, `/api/estatisticas` e
+  `/api/health` como rede de segurança. Ele compara uma assinatura
+  (`id:status:triado_em:categoria:diagnostico`) e, quando detecta uma escrita vinda do
+  MCP no SQLite, aplica `flash-n1`/`flash-n2` ao card e o selo `ATUALIZADO AGORA`.
+  O badge do topo mostra `SQLite Conectado (Ao Vivo) · N aguardando triagem`.
 
 ## Cenários semeado no banco
 
